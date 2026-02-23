@@ -28,8 +28,9 @@ jobs:
 
       - name: Run tests
         env:
-          FLASK_SECRET_KEY: ${{ secrets.FLASK_SECRET_KEY || 'ci-test-secret-key' }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD || 'CI-TestAdmin123!' }}
+          FLASK_SECRET_KEY: ci-test-secret-key
+          ADMIN_PASSWORD: CI-TestAdmin123!
           DATABASE_PATH: /tmp/logiclab_ci_test.db
           SECURITY_LOG_PATH: /tmp/logiclab_ci_security.log
+          PYTHONPATH: ${{ github.workspace }}
         run: pytest tests/ -v
