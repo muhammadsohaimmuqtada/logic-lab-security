@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run tests
+        env:
+          FLASK_SECRET_KEY: ${{ secrets.FLASK_SECRET_KEY || 'ci-test-secret-key' }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD || 'CI-TestAdmin123!' }}
+          DATABASE_PATH: /tmp/logiclab_ci_test.db
+          SECURITY_LOG_PATH: /tmp/logiclab_ci_security.log
+        run: pytest tests/ -v
