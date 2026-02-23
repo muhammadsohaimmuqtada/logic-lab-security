@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container">
+  <div class="card">
+    <h2>{{ service.name }}</h2>
+    <p>{{ service.description }}</p>
+
+    <div class="muted">Service ID: {{ service.id }}</div>
+    <div class="muted">Owner ID: {{ service.owner_user_id }}</div>
+    <div class="muted">Org ID: {{ service.org_id }}</div>
+    <div class="muted">Visibility: <b>{{ service.visibility }}</b></div>
+    <div class="muted">Status: <b>{{ service.status }}</b></div>
+    <div class="muted">Price: <b>{{ service.price_cents }}</b></div>
+    <div class="muted">Created: {{ service.created_at }}</div>
+
+    <div style="margin-top:14px;" class="row">
+      <a class="btn secondary" href="/services">Back</a>
+
+      {% if service.owner_user_id == session.get('user_id') %}
+        {% if service.status == 'draft' %}
+          <form method="POST" action="/services/{{ service.id }}/list" style="display:inline;">
+  <input type="hidden" name="_csrf_token" value="{{ session.get('_csrf_token') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn" type="submit">List Service</button>
+          </form>
+        {% elif service.status == 'listed' %}
+          <form method="POST" action="/services/{{ service.id }}/unlist" style="display:inline;">
+  <input type="hidden" name="_csrf_token" value="{{ session.get('_csrf_token') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn secondary" type="submit">Move to Draft</button>
+          </form>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

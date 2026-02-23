@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container">
+  <div class="card">
+    <h2>Your Services</h2>
+    <p class="muted">Multi-tenant services with visibility and state rules.</p>
+
+    <form method="POST" action="/services/new" class="row" style="margin-top:12px;">
+  <input type="hidden" name="_csrf_token" value="{{ session.get('_csrf_token') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input class="input" name="name" placeholder="Service name" required>
+      <input class="input" name="description" placeholder="Description">
+      <input class="input" name="price_cents" type="number" min="0" max="500000" step="1" placeholder="Price (cents)">
+      <select class="input" name="visibility">
+        <option value="private">Private</option>
+        <option value="org">Org</option>
+        <option value="public">Public</option>
+      </select>
+      <button class="btn" type="submit">Create</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Visible Services</h3>
+    {% if services|length == 0 %}
+      <p class="muted">No services visible yet.</p>
+    {% else %}
+      <ul class="list">
+      {% for s in services %}
+        <li class="list-item">
+          <div>
+            <div class="title">{{ s.name }}</div>
+            <div class="muted">{{ s.description }}</div>
+            <div class="muted">
+              Status: <b>{{ s.status }}</b> · Visibility: <b>{{ s.visibility }}</b> · Price: <b>{{ s.price_cents }}</b>
+            </div>
+            <div class="muted">Owner ID: {{ s.owner_user_id }} · Org ID: {{ s.org_id }} · Created: {{ s.created_at }}</div>
+          </div>
+          <a class="btn secondary" href="/services/{{ s.id }}">View</a>
+        </li>
+      {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

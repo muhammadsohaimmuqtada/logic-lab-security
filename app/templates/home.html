@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h1>Logic Lab Security Project</h1>
+  <p>A realistic web app for learning secure web application patterns: access control, authorization, input validation, and business logic hardening.</p>
+  <div style="margin-top:14px;">
+    {% if user %}
+      <a class="btn" href="/dashboard">Go to Dashboard</a>
+    {% else %}
+      <a class="btn" href="/register">Create Account</a>
+      <a class="btn secondary" href="/login" style="margin-left:8px;">Sign In</a>
+    {% endif %}
+  </div>
+  <div class="footer">Running behind Nginx → Gunicorn → Flask</div>
+</div>
+{% endblock %}

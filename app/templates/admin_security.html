@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h1 style="margin-top:0;">Security Dashboard</h1>
+
+  <div class="card" style="margin-top:12px;">
+    <h2 style="margin-top:0;">Manual Ban / Unban</h2>
+
+    <form method="post" action="/admin/ban" style="display:flex; gap:10px; flex-wrap:wrap; align-items:end;">
+  <input type="hidden" name="_csrf_token" value="{{ session.get('_csrf_token') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div>
+        <label>IP</label>
+        <input class="input" name="ip" placeholder="192.168.1.15" required>
+      </div>
+      <div>
+        <label>Minutes</label>
+        <input class="input" name="minutes" type="number" value="30" min="1" max="1440" required>
+      </div>
+      <div style="flex:1; min-width:220px;">
+        <label>Reason</label>
+        <input class="input" name="reason" placeholder="e.g. brute force / scanning">
+      </div>
+      <button class="btn" type="submit">Ban</button>
+    </form>
+
+    <form method="post" action="/admin/unban" style="display:flex; gap:10px; flex-wrap:wrap; align-items:end; margin-top:12px;">
+  <input type="hidden" name="_csrf_token" value="{{ session.get('_csrf_token') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div>
+        <label>IP</label>
+        <input class="input" name="ip" placeholder="192.168.1.15" required>
+      </div>
+      <button class="btn secondary" type="submit">Unban</button>
+    </form>
+  </div>
+
+  <div class="card" style="margin-top:12px;">
+    <h2 style="margin-top:0;">Active Bans</h2>
+    {% if bans|length == 0 %}
+      <p>No active bans.</p>
+    {% else %}
+      <div style="overflow:auto;">
+        <table style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:left; padding:8px; border-bottom:1px solid rgba(255,255,255,0.12);">IP</th>
+              <th style="text-align:left; padding:8px; border-bottom:1px solid rgba(255,255,255,0.12);">Reason</th>
+              <th style="text-align:left; padding:8px; border-bottom:1px solid rgba(255,255,255,0.12);">Expires</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in bans %}
+              <tr>
+                <td style="padding:8px; border-bottom:1px solid rgba(255,255,255,0.08);">{{ b.ip }}</td>
+                <td style="padding:8px; border-bottom:1px solid rgba(255,255,255,0.08);">{{ b.reason }}</td>
+                <td style="padding:8px; border-bottom:1px solid rgba(255,255,255,0.08);">
+                  {{ b.expires_at }} (unix) / {{ (b.expires_at - now) }}s left
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card" style="margin-top:12px;">
+    <h2 style="margin-top:0;">Recent Security Events</h2>
+    <div style="overflow:auto; max-height:520px;">
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:8px; border-bottom:1px solid rgba(255,255,255,0.12);">Time</th>
+            <th style="text-align:left; padding:8px; border-bottom:1px solid rgba(255,255,255,0.12);">IP</th>
+            <th style="text-align:left; padding:8px; border-bottom:1px solid rgba(255,255,255,0.12);">Event</th>
+            <th style="text-align:left; padding:8px; border-bottom:1px solid rgba(255,255,255,0.12);">Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in events %}
+            <tr>
+              <td style="padding:8px; border-bottom:1px solid rgba(255,255,255,0.08);">{{ e.ts }}</td>
+              <td style="padding:8px; border-bottom:1px solid rgba(255,255,255,0.08);">{{ e.ip }}</td>
+              <td style="padding:8px; border-bottom:1px solid rgba(255,255,255,0.08);"><b>{{ e.event }}</b></td>
+              <td style="padding:8px; border-bottom:1px solid rgba(255,255,255,0.08);">{{ e.detail }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="footer" style="margin-top:10px;">Admin = user_id 1 (first registered user).</p>
+  </div>
+</div>
+{% endblock %}

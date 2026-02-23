@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="grid">
+  <div class="card">
+    <h1>Dashboard</h1>
+    <p>Welcome, <b>{{ user.username }}</b>.</p>
+    <p>This is the base app. Next we’ll add “Accounts” and purposely introduce a logic flaw (IDOR) after login.</p>
+    <div style="margin-top:14px;">
+      <a class="btn" href="/logout">Logout</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h1>Lab Modules</h1>
+    <p>Coming next:</p>
+    <ul>
+      <li>Object-level authorization testing</li>
+      <li>Transaction workflow validation</li>
+      <li>Rate limiting and OTP protections</li>
+      <li>Privilege boundary enforcement</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}
+
+<div style="margin-top:18px;">
+  <div class="card">
+    <h3>Objects</h3>
+    <p class="muted">Start here: create and view services (secure ownership enforced).</p>
+    <a class="nav-btn" href="/services">Go to Services</a>
+  </div>
+</div>
+

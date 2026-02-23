@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DEDSEC Logic Lab</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="nav">
+    <div class="brand"><a href="/">DEDSEC Logic Lab</a></div>
+    <div>
+      {% if user %}
+        <a class="btn secondary" href="/services">Services</a>
+        <a class="btn secondary" href="/dashboard" style="margin-left:8px;">Dashboard</a>
+        <form method="post" action="/logout" style="display:inline; margin-left:8px;">
+  <input type="hidden" name="_csrf_token" value="{{ session.get('_csrf_token') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn" type="submit">Logout</button>
+        </form>
+      {% else %}
+        <a class="btn secondary" href="/login">Login</a>
+        <a class="btn" href="/register" style="margin-left:8px;">Register</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="wrap">
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash">{{ messages[0] }}</div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>
