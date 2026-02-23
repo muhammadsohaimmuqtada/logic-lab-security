@@ -9,12 +9,12 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = Path("/var/lib/logic-lab/logiclab.db")
-SECURITY_LOG = Path("/var/log/logic-lab/security.log")
+import os
+DB_PATH = Path(os.environ.get("DATABASE_PATH", "/var/lib/logic-lab/logiclab.db"))
+SECURITY_LOG = Path(os.environ.get("SECURITY_LOG_PATH", "/var/log/logic-lab/security.log"))
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024  # 64KB request cap
-import os
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-lab-fallback")
 
 
@@ -54,35 +54,23 @@ try:
 except Exception:
     pass
 
-# Enforce CSRF on state-changing routes
-CSRF_PROTECT_ENDPOINTS = {
-    "login",
-    "register",
-    "logout",
-    "admin_ban",
-    "admin_unban",
-    "create_service",
-    "edit_service",
-    "delete_service",
-    "service_list_action",
-    "service_unlist_action",
-}
-
-# services endpoints protected
-
-
-@app.before_request
-def _csrf_guard():
-    if request.method == "POST":
-        if request.endpoint in CSRF_PROTECT_ENDPOINTS:
-            require_csrf()
+# CSRF is enforced blanket-style via csrf_protect_all_posts() below.
 # ------------------------------------------------
 
 # -----------------------
 # Hardcoded admin (LAB ONLY)
 # -----------------------
-ADMIN_USERNAME = "dedsec"
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "ChangeMe123!")  # demo default; override in env
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "dedsec")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+
+if not ADMIN_PASSWORD:
+    import warnings
+    warnings.warn(
+        "ADMIN_PASSWORD not set! Using insecure default. "
+        "Set ADMIN_PASSWORD env var for any non-local usage.",
+        stacklevel=2,
+    )
+    ADMIN_PASSWORD = "ChangeMe123!"
 
 
 # -----------------------
@@ -109,9 +97,9 @@ def _safe_log_value(v):
 
 def security_log(event, **details):
     timestamp = datetime.utcnow().isoformat()
-    line = f"{timestamp} | EVENT={event}"
+    line = f"{timestamp} | EVENT={_safe_log_value(event)}"
     for k, v in details.items():
-        line += f" | {k.upper()}={v}"
+        line += f" | {k.upper()}={_safe_log_value(v)}"
     with open(SECURITY_LOG, "a") as f:
         f.write(line + "\n")
 
@@ -191,29 +179,56 @@ def can_modify_service_row(row):
 def init_db():
     conn = db()
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS users (
+        CREATE TABLE IF NOT EXISTS orgs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL
+            name TEXT UNIQUE NOT NULL
         );
     """)
 
-    # Add is_admin column if DB already existed (ignore if already added)
-    try:
-        conn.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0;")
-    except sqlite3.OperationalError:
-        pass
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            is_admin INTEGER NOT NULL DEFAULT 0,
+            org_id INTEGER REFERENCES orgs(id)
+        );
+    """)
+
+    # Add is_admin / org_id columns if DB already existed (ignore if already added)
+    for alter_sql in [
+        "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE users ADD COLUMN org_id INTEGER REFERENCES orgs(id);",
+    ]:
+        try:
+            conn.execute(alter_sql)
+        except sqlite3.OperationalError:
+            pass
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS services (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             owner_user_id INTEGER NOT NULL,
+            org_id INTEGER,
             name TEXT NOT NULL,
             description TEXT NOT NULL DEFAULT '',
+            visibility TEXT NOT NULL DEFAULT 'private',
+            status TEXT NOT NULL DEFAULT 'draft',
+            price_cents INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY(owner_user_id) REFERENCES users(id)
         );
     """)
+    for alter_sql in [
+        "ALTER TABLE services ADD COLUMN org_id INTEGER;",
+        "ALTER TABLE services ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private';",
+        "ALTER TABLE services ADD COLUMN status TEXT NOT NULL DEFAULT 'draft';",
+        "ALTER TABLE services ADD COLUMN price_cents INTEGER NOT NULL DEFAULT 0;",
+    ]:
+        try:
+            conn.execute(alter_sql)
+        except sqlite3.OperationalError:
+            pass
     conn.execute("""
         CREATE TABLE IF NOT EXISTS login_attempts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -341,10 +356,16 @@ def admin_required(fn):
     return wrapper
 
 
+# SECURITY: Only trust X-Forwarded-For when behind a properly configured reverse proxy
+# (e.g., nginx with proxy_set_header X-Forwarded-For $remote_addr;)
+# Set TRUST_PROXY=1 in environment to enable XFF trust.
+TRUST_PROXY = os.environ.get("TRUST_PROXY", "0") == "1"
+
 def client_ip():
-    xff = request.headers.get("X-Forwarded-For", "")
-    if xff:
-        return xff.split(",")[0].strip()
+    if TRUST_PROXY:
+        xff = request.headers.get("X-Forwarded-For", "")
+        if xff:
+            return xff.split(",")[0].strip()
     return request.remote_addr or "unknown"
 
 
