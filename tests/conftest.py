@@ -20,6 +20,31 @@ import app.app as app_module
 from app.app import app as flask_app
 
 
+@pytest.fixture(autouse=True)
+def _fast_password_hash(monkeypatch):
+    """
+    Replace werkzeug's password hashing with a fast method for tests.
+
+    Production uses pbkdf2:sha256 with ~260 000 iterations (~100 ms per hash).
+    In tests we use pbkdf2:sha256 with 1 iteration so the suite stays fast
+    without sacrificing the hash/verify code-paths being exercised.
+
+    We patch both the werkzeug module and the names imported directly into
+    app.app so every call site is covered.
+    """
+    import werkzeug.security as _ws
+
+    _original_generate = _ws.generate_password_hash
+
+    def _fast_generate(password, method=None, salt_length=16):
+        return _original_generate(password, method="pbkdf2:sha256:1", salt_length=salt_length)
+
+    monkeypatch.setattr(_ws, "generate_password_hash", _fast_generate)
+    # Patch the name as imported directly into app.app
+    monkeypatch.setattr(app_module, "generate_password_hash", _fast_generate)
+    # check_password_hash delegates to the stored method tag, so no patch needed.
+
+
 @pytest.fixture()
 def client(tmp_path):
     """Flask test client with a fresh SQLite DB per test (no cross-test pollution)."""

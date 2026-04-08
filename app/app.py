@@ -1,9 +1,11 @@
+import hmac
+import logging
 import sqlite3
 import secrets
 import time
 from pathlib import Path
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, timezone
 
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import Flask, render_template, request, redirect, url_for, session, flash
@@ -23,6 +25,14 @@ app.config.setdefault("SESSION_COOKIE_SAMESITE", "Lax")
 # SESSION_COOKIE_SECURE should be True only when you move to HTTPS
 app.config.setdefault("SESSION_COOKIE_SECURE", False)
 
+# --------------- Python logging ---------------
+_logger = logging.getLogger("logic_lab.security")
+if not _logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    _logger.addHandler(_handler)
+_logger.setLevel(logging.INFO)
+
 
 
 # ---------------- CSRF (manual) ----------------
@@ -37,11 +47,10 @@ def csrf_token():
 def require_csrf():
     sent = request.form.get("csrf_token", "") or request.headers.get("X-CSRF-Token", "")
     real = session.get("_csrf_token", "")
-    if not real or not sent or sent != real:
-        # optional: log if you have a security logger
+    # Use hmac.compare_digest to prevent timing-based token oracle attacks
+    if not real or not sent or not hmac.compare_digest(sent, real):
         try:
             ip = request.headers.get("X-Forwarded-For", request.remote_addr)
-            # if you already have a logger, this will work; if not, it will just skip
             security_log("CSRF_FAIL", ip=ip, detail=f"path={request.path}")
         except Exception:
             pass
@@ -96,12 +105,17 @@ def _safe_log_value(v):
 
 
 def security_log(event, **details):
-    timestamp = datetime.utcnow().isoformat()
+    timestamp = datetime.now(timezone.utc).isoformat()
     line = f"{timestamp} | EVENT={_safe_log_value(event)}"
     for k, v in details.items():
         line += f" | {k.upper()}={_safe_log_value(v)}"
-    with open(SECURITY_LOG, "a") as f:
-        f.write(line + "\n")
+    try:
+        SECURITY_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(SECURITY_LOG, "a") as f:
+            f.write(line + "\n")
+    except OSError as exc:
+        _logger.warning("security_log file write failed: %s", exc)
+    _logger.info("SECURITY %s", line)
 
 
 def db():
@@ -458,7 +472,7 @@ def ban_gate():
     if (request.path or "").startswith("/static/"):
         return None
 
-    return f"Banned: {ban['reason']} (expires {datetime.utcfromtimestamp(ban['expires_at']).isoformat()}Z)", 403
+    return f"Banned: {ban['reason']} (expires {datetime.fromtimestamp(ban['expires_at'], tz=timezone.utc).isoformat()})", 403
 
 
 
@@ -559,6 +573,19 @@ def csrf_protect_all_posts():
     return require_csrf()
 
 
+@app.after_request
+def add_security_headers(response):
+    """Attach defensive HTTP security headers to every response."""
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    )
+    return response
+
+
 @app.route("/")
 def home():
     return render_template("home.html", user=current_user())
@@ -630,8 +657,9 @@ def login():
         if not user or not check_password_hash(user["password_hash"], password):
             record_login_attempt(ip, username, ok=0)
             detection_on_failed_login(ip, username)
-            # soft throttle (no bans)
-            time.sleep(min(3.0, 0.5 * (count_failures(ip, LOGIN_FAIL_WINDOW) // 3)))
+            # soft throttle: progressive delay to slow brute-force (skipped in TESTING mode)
+            if not app.config.get("TESTING"):
+                time.sleep(min(3.0, 0.5 * (count_failures(ip, LOGIN_FAIL_WINDOW) // 3)))
             flash("Invalid username or password.")
             return redirect(url_for("login"))
 
