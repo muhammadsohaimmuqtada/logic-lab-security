@@ -2,9 +2,7 @@
 
 [![CI](https://github.com/muhammadsohaimmuqtada/logic-lab-security/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammadsohaimmuqtada/logic-lab-security/actions/workflows/ci.yml)
 
-A security-focused Flask lab application demonstrating multi-tenant business logic hardening for a service marketplace. Built as a LinkedIn-portfolio piece covering OWASP Top-10 threat categories.
-
----
+A Flask security lab focused on multi-tenant authorization, business-logic enforcement, and secure application design. The project is built around concrete access-control and state-change behaviors rather than generic scanner output.
 
 ## What this project demonstrates
 
@@ -18,8 +16,6 @@ A security-focused Flask lab application demonstrating multi-tenant business log
 - Log injection hardening (`_safe_log_value` sanitisation)
 - Configurable reverse-proxy trust for `X-Forwarded-For`
 - Startup warning when admin password is left at insecure default
-
----
 
 ## Threat Model
 
@@ -35,11 +31,9 @@ A security-focused Flask lab application demonstrating multi-tenant business log
 | Enum / input tampering | `normalize_visibility()`, `normalize_username()`, `validate_password_basic()` | `app/app.py` |
 | Privilege escalation to admin | `admin_required` decorator checks `is_admin` from DB | `app/app.py` |
 
----
-
 ## Security Architecture
 
-```
+```text
 Browser / Client
        │
        ▼
@@ -60,8 +54,6 @@ Browser / Client
        └─ can_modify_service_row()            ← owner-only mutations
 ```
 
----
-
 ## OWASP Coverage
 
 | OWASP A-Category | Coverage |
@@ -72,11 +64,9 @@ Browser / Client
 | A05 Security Misconfiguration | Startup warning for default credentials; `TRUST_PROXY` flag |
 | A07 Identification & Auth Failures | Rate limiting, session rotation on login, CSRF |
 
----
-
 ## Project Structure
 
-```
+```text
 logic-lab-security/
 ├── app/
 │   ├── app.py            # Main Flask application (all logic)
@@ -93,8 +83,6 @@ logic-lab-security/
 ├── requirements.txt      # Python dependencies
 └── README.md
 ```
-
----
 
 ## Quick Start
 
@@ -119,8 +107,6 @@ python app/app.py
 # gunicorn -c gunicorn.conf.py app.app:app
 ```
 
----
-
 ## Testing
 
 ```bash
@@ -128,7 +114,7 @@ pip install pytest
 pytest tests/ -v
 ```
 
-All tests use an isolated per-test SQLite database (no shared state, no external services required).
+All tests use an isolated per-test SQLite database with no shared state or external services required.
 
 ### What the test suite covers
 
@@ -149,8 +135,6 @@ All tests use an isolated per-test SQLite database (no shared state, no external
 | `test_non_admin_cannot_access_admin_routes` | Admin access control |
 | `test_unauthenticated_user_redirected_from_admin` | Admin access control |
 
----
-
 ## Core security design
 
 ### Visibility model
@@ -162,19 +146,14 @@ All tests use an isolated per-test SQLite database (no shared state, no external
 - Edit / Delete / List / Unlist actions are **owner-only**
 - Same-org users can *view* `org` items but **cannot** modify them
 
----
-
 ## Tech stack
+
 - Flask 3.x
 - Gunicorn
-- nginx (production)
+- nginx
 - SQLite (WAL mode)
 - Jinja2
 
----
-
 ## Notes
-This is a lab / portfolio project focused on secure application design and authorization logic. Do not run with default credentials in any environment accessible from the internet.
 
-Suggested repository topics: `flask` · `security` · `web-security` · `authorization` · `csrf-protection` · `multi-tenant` · `python` · `owasp`
-
+This is a lab focused on secure application design and authorization logic. Do not expose it to the internet with default credentials or development configuration.
