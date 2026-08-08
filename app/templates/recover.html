@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block content %}
+<div class="auth card"><p class="eyebrow">LEGACY RECOVERY</p><h1>Recover account</h1><p class="muted">For older tenant accounts that pre-date verified recovery email.</p>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Username<input name="username" required></label><label>Organization<input name="org_name" required></label><label>New password<input type="password" name="new_password" minlength="8" required></label><button class="btn">Reset password</button></form></div>
+{% endblock %}

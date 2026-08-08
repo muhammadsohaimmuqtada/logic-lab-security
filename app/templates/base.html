@@ -1,37 +1,38 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>DEDSEC Logic Lab</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}Logic Lab Security{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <div class="nav">
-    <div class="brand"><a href="/">DEDSEC Logic Lab</a></div>
-    <div>
-      {% if user %}
-        <a class="btn secondary" href="/services">Services</a>
-        <a class="btn secondary" href="/dashboard" style="margin-left:8px;">Dashboard</a>
-        <form method="post" action="/logout" style="display:inline; margin-left:8px;">
-  <input type="hidden" name="_csrf_token" value="{{ session.get('_csrf_token') }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn" type="submit">Logout</button>
-        </form>
-      {% else %}
-        <a class="btn secondary" href="/login">Login</a>
-        <a class="btn" href="/register" style="margin-left:8px;">Register</a>
-      {% endif %}
-    </div>
-  </div>
-
-  <div class="wrap">
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <div class="flash">{{ messages[0] }}</div>
-      {% endif %}
-    {% endwith %}
-    {% block content %}{% endblock %}
-  </div>
+<header class="topbar">
+  <a class="brand" href="/">LOGIC<span>LAB</span></a>
+  <nav>
+    <a href="/lab">Challenges</a>
+    {% if session.get('user_id') %}
+      <a href="/services">Services</a>
+      <a href="/org">Organization</a>
+      <a href="/commerce">Commerce</a>
+      <form method="post" action="/logout" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="link-button">Logout</button>
+      </form>
+    {% else %}
+      <a href="/login">Login</a>
+      <a href="/register">Register</a>
+    {% endif %}
+  </nav>
+</header>
+<main class="shell">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="flash {{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+<footer>Purpose-built training application. Run only in an isolated lab environment.</footer>
 </body>
 </html>

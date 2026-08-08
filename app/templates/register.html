@@ -1,21 +1,7 @@
-{% extends "base.html" %}
-{% block content %}
-<div class="card" style="max-width:480px;">
-  <h1>Register</h1>
-  <form method="post">
-  <input type="hidden" name="_csrf_token" value="{{ session.get('_csrf_token') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Username</label>
-    <input class="input" name="username" required minlength="3" />
-    <label>Password</label>
-    <input class="input" type="password" name="password" required minlength="6" />
-    <div style="margin-top:14px;">
-      <label for="org_name">Organization</label>
-      <input type="text" id="org_name" name="org_name" required minlength="2" placeholder="Acme Team">
-
-      <button class="btn" type="submit">Create Account</button>
-      <a class="btn secondary" href="/login" style="margin-left:8px;">Already have one?</a>
-    </div>
-  </form>
-</div>
+{% extends "base.html" %}{% block content %}
+<div class="auth card"><p class="eyebrow">ONBOARDING</p><h1>Create account</h1>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Username<input name="username" minlength="3" required></label><label>Email<input type="email" name="email" required></label>
+<label>Password<input type="password" name="password" minlength="8" required></label><label>Organization<input name="org_name" minlength="2" placeholder="Your team name" required></label>
+<button class="btn">Create account</button></form></div>
 {% endblock %}
