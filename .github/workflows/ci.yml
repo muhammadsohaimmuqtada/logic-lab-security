@@ -14,8 +14,13 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip check
       - name: Compile
         run: python -m compileall app tests scripts
       - name: Run lab contract and regression tests
@@ -45,6 +50,24 @@ jobs:
           PY
       - name: Build container
         run: docker build -t logic-lab-ci .
+      - name: Verify production image hygiene
+        run: |
+          docker run --rm -i logic-lab-ci python - <<'PY'
+          import importlib.util
+          import os
+          from pathlib import Path
+          assert os.getuid() == 10001
+          assert importlib.util.find_spec('pytest') is None
+          for forbidden in (
+              '/app/tests',
+              '/app/docs',
+              '/app/challenges',
+              '/app/scripts',
+              '/app/requirements-dev.txt',
+          ):
+              assert not Path(forbidden).exists(), forbidden
+          print('production image hygiene: ok')
+          PY
       - name: Smoke-test container
         run: |
           set -euo pipefail
