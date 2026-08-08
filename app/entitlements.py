@@ -3,7 +3,7 @@ import time
 from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
 from .db import get_db
 from .lab import flag
-from .security import current_org_id, login_required
+from .security import current_org_id, login_required, parse_int
 
 entitlements_bp = Blueprint("entitlements", __name__, url_prefix="/entitlements")
 
@@ -42,14 +42,15 @@ def bulk_invite():
     raw = (request.form.get("emails") or "").replace("\n", ",")
     emails = [x.strip().lower() for x in raw.split(",") if "@" in x]
     current_members = db.execute("SELECT COUNT(*) AS c FROM memberships WHERE org_id=?", (current_org_id(),)).fetchone()["c"]
-    if not sub or current_members >= sub["seat_limit"]:
+    pending = db.execute("SELECT COUNT(*) AS c FROM invitations WHERE org_id=? AND revoked=0 AND used_at IS NULL", (current_org_id(),)).fetchone()["c"]
+    if not sub or current_members + pending >= sub["seat_limit"]:
         flash("No seat capacity is currently available.", "error")
         return redirect(url_for("entitlements.index"))
     created = 0
     for email in emails[:20]:
         db.execute("INSERT INTO invitations(org_id,email,role,token,revoked,used_at) VALUES(?,?,?,?,0,NULL)", (current_org_id(), email, "member", secrets.token_urlsafe(18)))
         created += 1
-    marker = flag("LL19") if current_members + created > sub["seat_limit"] else ""
+    marker = flag("LL19") if current_members + pending + created > sub["seat_limit"] else ""
     flash(f"Created {created} pending invitations. {marker}", "success")
     return redirect(url_for("entitlements.index"))
 
@@ -61,10 +62,7 @@ def extend_trial():
     sub = _subscription()
     if not sub:
         abort(404)
-    try:
-        days = max(1, min(30, int(request.form.get("days") or 7)))
-    except ValueError:
-        abort(400)
+    days = parse_int(request.form.get("days"), default=7, minimum=1, maximum=30)
     previous = sub["trial_extensions"]
     db.execute("UPDATE subscriptions SET trial_ends_at=trial_ends_at+?, trial_extensions=trial_extensions+1 WHERE org_id=?", (days * 86400, current_org_id()))
     marker = flag("LL20") if previous >= 1 else ""
