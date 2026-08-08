@@ -38,12 +38,13 @@ def test_ll21_api_notes_lack_object_authorization(app, client):
 
 def test_ll22_api_allows_sensitive_property_update(app, client):
     login(client, "student")
-    r = client.patch("/api/v1/services/2", json={"owner_user_id": 6, "status": "published"}, headers=api_headers(client))
+    r = client.patch("/api/v1/services/2", json={"owner_user_id": 4, "status": "published"}, headers=api_headers(client))
     assert r.status_code == 200
     assert r.get_json()["marker"] == expected_flag(app, "LL22", "student")
     with app.app_context():
-        row = get_db().execute("SELECT owner_user_id FROM services WHERE id=2").fetchone()
-        assert row["owner_user_id"] == 6
+        row = get_db().execute("SELECT owner_user_id,status FROM services WHERE id=2").fetchone()
+        assert row["owner_user_id"] == 4
+        assert row["status"] == "published"
 
 
 def test_ll23_batch_only_authorizes_first_object(app, client):
@@ -65,8 +66,9 @@ def test_ll24_partner_domain_suffix_is_not_identity(app, client):
 
 def test_ll25_alternate_export_path_bypasses_quota(app, client):
     login(client, "student")
-    first = client.get("/entitlements/export")
+    token = csrf(client)
+    first = client.post("/entitlements/export", data={"csrf_token": token})
     assert first.status_code == 200
-    second = client.get("/api/v1/export")
+    second = client.post("/api/v1/export", headers=api_headers(client))
     assert second.status_code == 200
     assert second.get_json()["marker"] == expected_flag(app, "LL25", "student")
