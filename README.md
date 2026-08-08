@@ -42,10 +42,11 @@ Each challenge has a regression test that proves the intended teaching flaw rema
 - deterministic seeded organizations, users, services, plans, invitations, orders, and coupons;
 - separate web and `/api/v1` business surfaces;
 - resettable lab state;
-- spoiler-reduced learner bundle;
-- instructor guide;
+- spoiler-reduced learner bundle with the test suite and instructor materials removed;
+- instructor guide and architecture documentation;
 - Docker and direct Python/Gunicorn execution;
-- CI coverage for Python compilation, regression tests, learner-bundle generation, Docker image build, and live container health.
+- separate runtime and development dependency sets;
+- CI coverage for Python compilation, regression tests, learner-bundle generation, production-image hygiene, Docker image build, and live container health.
 
 ## Flag integrity
 
@@ -54,6 +55,8 @@ Runtime secrets are never intentionally stored as known defaults.
 If `FLASK_SECRET_KEY` or `LAB_FLAG_SECRET` is not provided, Logic Lab creates separate cryptographically random values under the instance directory and reuses them for that installation. Docker keeps the instance directory in a named volume, so flags and sessions remain stable across container restarts while remaining unique to the deployment.
 
 For managed classroom deployments, you can still supply explicit long random values through environment variables.
+
+The lab actor is separate from the application account currently in use. Account-recovery and account-takeover workflows can therefore pivot into another account without moving challenge ownership. If recovery is completed before any learner identity has been established, the proof is held pending and bound on first login.
 
 ## Quick start
 
@@ -95,7 +98,7 @@ python scripts/reset_demo_db.py
 docker compose up --build
 ```
 
-The container listens on its internal interface while Compose publishes it only on `127.0.0.1:8000`. The image runs as an unprivileged user and includes a health check.
+The container listens on its internal interface while Compose publishes it only on `127.0.0.1:8000`. The image runs as an unprivileged user, contains only runtime dependencies and runtime application files, and includes a health check.
 
 ```bash
 docker compose ps
@@ -122,30 +125,16 @@ A spoiler-reduced bundle can be generated with:
 python scripts/build_learner_bundle.py
 ```
 
-The generated archive excludes the instructor guide, internal challenge manifest, and exploit-contract test files. Because application source is still included, this is intentionally described as **spoiler-reduced**, not source-secret or tamper-proof.
+The generated archive excludes the instructor guide, internal challenge manifest, and the complete test suite. Because application source is still included, this is intentionally described as **spoiler-reduced**, not source-secret or tamper-proof.
 
-## Testing
+## HTTP and safety model
 
-Run the complete local suite:
-
-```bash
-pytest -q
-```
-
-The tests are organized into four layers:
-
-1. **normal flows** — ordinary product behavior remains coherent;
-2. **challenge contracts** — intended vulnerabilities remain exploitable in the required way;
-3. **platform/integrity regressions** — flags, scoring, challenge isolation, malformed input, quotas, and learner packaging behave correctly;
-4. **safety invariants** — the training app does not drift toward host-command execution or unsafe network exposure.
-
-GitHub Actions additionally builds and boots the Docker image and verifies the live `/health` endpoint.
-
-## Safety boundary
+State-changing operations use POST/PATCH and pass through the global CSRF guard. This includes quota-consuming export generation: although the response is an export, generating it changes persistent quota usage and is therefore modeled as a mutation rather than a GET request.
 
 The application is intentionally weak at selected **business-logic** boundaries while retaining guardrails around the host/runtime boundary. The project intentionally keeps:
 
 - parameterized SQL for user-provided values;
+- normal domain validation around intentionally weak authorization decisions;
 - CSRF checks on state-changing HTTP methods;
 - Jinja auto-escaping;
 - request-size limits;
@@ -157,14 +146,33 @@ The application is intentionally weak at selected **business-logic** boundaries 
 
 See [SECURITY.md](SECURITY.md) for what should be treated as an actual project security defect.
 
+## Testing
+
+Install the development/test dependency set and run the complete suite:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pip check
+pytest -q
+```
+
+The tests are organized into four layers:
+
+1. **normal flows** — ordinary product behavior remains coherent;
+2. **challenge contracts** — intended vulnerabilities remain exploitable in the required way;
+3. **platform/integrity regressions** — flags, scoring, challenge isolation, authorization boundaries, malformed input, protocol semantics, quotas, and learner packaging behave correctly;
+4. **safety invariants** — the training app does not drift toward host-command execution or unsafe network exposure.
+
+GitHub Actions additionally verifies the spoiler-reduced learner bundle, builds the production image, asserts that development/test material is absent from that image, checks the unprivileged runtime UID, boots Gunicorn with two workers, and verifies the live `/health` endpoint.
+
 ## Repository structure
 
 ```text
 app/
 ├── __init__.py          Flask application factory
 ├── app.py               direct/Gunicorn entrypoint
-├── api.py               API business flows
-├── auth.py              registration, login, recovery
+├── api.py               API business flows and domain validation
+├── auth.py              registration, login, recovery, learner attribution
 ├── commerce.py          checkout, coupons, referrals, refunds, races
 ├── config.py            runtime configuration and installation secrets
 ├── db.py                schema, migrations, deterministic seed state
@@ -176,9 +184,12 @@ app/
 ├── static/
 └── templates/
 challenges/manifest.yml  internal challenge inventory
+docs/ARCHITECTURE.md     architecture and challenge-contract boundaries
 docs/INSTRUCTOR_GUIDE.md instructor spoilers and challenge mapping
 scripts/                  reset and learner-bundle tooling
 tests/                    product, challenge, platform, integrity, and safety tests
+requirements.txt          runtime dependencies
+requirements-dev.txt      test/development dependencies
 ```
 
 ## Contributing
