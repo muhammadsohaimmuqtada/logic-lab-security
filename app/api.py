@@ -16,8 +16,6 @@ def _service(service_id):
 
 def _json_object():
     payload = request.get_json(silent=True)
-    if payload is None:
-        return {}
     if not isinstance(payload, dict):
         abort(400)
     return payload
@@ -37,13 +35,17 @@ def _validated_patch(db, service, payload):
         values["description"] = payload["description"].strip()
 
     if "visibility" in payload:
-        visibility = str(payload["visibility"]).strip().lower()
+        if not isinstance(payload["visibility"], str):
+            abort(400)
+        visibility = payload["visibility"].strip().lower()
         if visibility not in VALID_VISIBILITY:
             abort(400)
         values["visibility"] = visibility
 
     if "status" in payload:
-        status = str(payload["status"]).strip().lower()
+        if not isinstance(payload["status"], str):
+            abort(400)
+        status = payload["status"].strip().lower()
         if status not in VALID_STATUS:
             abort(400)
         values["status"] = status
@@ -111,14 +113,21 @@ def batch_visibility():
     if not isinstance(raw_ids, list):
         abort(400)
     ids = [parse_int(x, minimum=1) for x in raw_ids[:20]]
-    visibility = payload.get("visibility", "org")
-    if not ids or visibility not in VALID_VISIBILITY:
+    if not ids or len(ids) != len(set(ids)):
+        abort(400)
+    raw_visibility = payload.get("visibility", "org")
+    if not isinstance(raw_visibility, str):
+        abort(400)
+    visibility = raw_visibility.strip().lower()
+    if visibility not in VALID_VISIBILITY:
         abort(400)
     first = _service(ids[0])
     if not first or first["owner_user_id"] != session["user_id"]:
         abort(403)
     placeholders = ",".join("?" for _ in ids)
     before = db.execute(f"SELECT id,org_id,owner_user_id FROM services WHERE id IN ({placeholders})", tuple(ids)).fetchall()
+    if len(before) != len(ids):
+        abort(400)
     cross_scope = any(r["owner_user_id"] != session["user_id"] for r in before)
     db.execute(f"UPDATE services SET visibility=? WHERE id IN ({placeholders})", (visibility, *ids))
     return {"updated_ids": ids, "marker": flag("LL23") if cross_scope else None}
@@ -128,7 +137,10 @@ def batch_visibility():
 @login_required
 def partner_enroll():
     payload = _json_object()
-    email = str(payload.get("email", "")).strip().lower()
+    email_value = payload.get("email", "")
+    if not isinstance(email_value, str):
+        abort(400)
+    email = email_value.strip().lower()
     if not email.endswith("alpha.local"):
         return {"accepted": False, "reason": "partner domain required"}, 403
     db = get_db()
