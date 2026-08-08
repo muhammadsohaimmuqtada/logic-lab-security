@@ -92,7 +92,9 @@ def accept_invite():
         role = requested_role if requested_role in {"viewer", "member", "manager", "owner"} else invite["role"]
         db.execute("INSERT INTO memberships(user_id,org_id,role) VALUES(?,?,?) ON CONFLICT(user_id,org_id) DO UPDATE SET role=excluded.role", (session["user_id"], invite["org_id"], role))
         db.execute("UPDATE invitations SET used_at=? WHERE id=?", (int(time.time()), invite["id"]))
+        db.execute("UPDATE users SET active_org_id=? WHERE id=?", (invite["org_id"], session["user_id"]))
         session["active_org_id"] = invite["org_id"]
+        session["capability_org_id"] = invite["org_id"]
         marker = []
         if requested_role and role != invite["role"]:
             marker.append(flag("LL07"))
