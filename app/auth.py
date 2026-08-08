@@ -61,12 +61,15 @@ def login():
             flash("Invalid credentials.", "error")
             return redirect(url_for("auth.login"))
         actor_id = session.get("lab_actor_id")
+        pending_ll16 = bool(session.get("pending_ll16"))
         session.clear()
         _restore_lab_actor(actor_id or user["id"])
         session["_csrf_token"] = csrf_token()
         session["user_id"] = user["id"]
         session["active_org_id"] = user["active_org_id"]
         session["capability_org_id"] = user["active_org_id"]
+        if pending_ll16:
+            flash(f"Recovery audit code: {flag('LL16')}", "success")
         return redirect(url_for("services.index"))
     return render_template("login.html")
 
@@ -93,7 +96,11 @@ def recover():
             flash("Recovery details not recognized.", "error")
             return redirect(url_for("auth.recover"))
         get_db().execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(new_password), user["id"]))
-        actor_id = session.get("lab_actor_id") or user["id"]
-        flash(f"Password reset completed. Recovery audit code: {flag('LL16', user_id=actor_id)}", "success")
+        actor_id = session.get("lab_actor_id")
+        if actor_id:
+            flash(f"Password reset completed. Recovery audit code: {flag('LL16', user_id=actor_id)}", "success")
+        else:
+            session["pending_ll16"] = True
+            flash("Password reset completed. Sign in to bind the recovery audit code to your learner profile.", "success")
         return redirect(url_for("auth.login"))
     return render_template("recover.html")
