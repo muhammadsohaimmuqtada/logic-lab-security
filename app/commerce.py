@@ -65,9 +65,28 @@ def referral():
     if not referrer:
         flash("Referral code not found.", "error")
         return redirect(url_for("commerce.index"))
+
     reward = 1000
-    db.execute("UPDATE users SET credits=credits+? WHERE id IN (?,?)", (reward, referrer["id"], session["user_id"]))
-    db.execute("INSERT INTO referral_events(referrer_user_id,referred_user_id,reward_cents,created_at) VALUES(?,?,?,?)", (referrer["id"], session["user_id"], reward, int(time.time())))
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        existing = db.execute(
+            "SELECT 1 FROM referral_events WHERE referred_user_id=? LIMIT 1",
+            (session["user_id"],),
+        ).fetchone()
+        if existing:
+            db.execute("ROLLBACK")
+            flash("A referral reward has already been applied to this account.", "error")
+            return redirect(url_for("commerce.index"))
+        db.execute(
+            "INSERT INTO referral_events(referrer_user_id,referred_user_id,reward_cents,created_at) VALUES(?,?,?,?)",
+            (referrer["id"], session["user_id"], reward, int(time.time())),
+        )
+        db.execute("UPDATE users SET credits=credits+? WHERE id IN (?,?)", (reward, referrer["id"], session["user_id"]))
+        db.execute("COMMIT")
+    except Exception:
+        db.execute("ROLLBACK")
+        raise
+
     marker = flag("LL13") if referrer["id"] == session["user_id"] else ""
     flash("Referral reward applied. " + marker, "success")
     return redirect(url_for("commerce.index"))

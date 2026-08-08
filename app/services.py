@@ -8,6 +8,10 @@ from .lab import flag
 
 services_bp = Blueprint("services", __name__, url_prefix="/services")
 
+VALID_VISIBILITY = {"private", "org", "public"}
+MAX_SERVICE_NAME = 120
+MAX_SERVICE_DESCRIPTION = 5000
+
 
 def _service(service_id):
     return get_db().execute("SELECT * FROM services WHERE id=?", (service_id,)).fetchone()
@@ -36,6 +40,14 @@ def _consume_export_quota():
     return True, used + 1, sub["export_quota"]
 
 
+def _validated_service_text(name, description):
+    name = (name or "").strip()
+    description = (description or "").strip()
+    if not 2 <= len(name) <= MAX_SERVICE_NAME or len(description) > MAX_SERVICE_DESCRIPTION:
+        abort(400)
+    return name, description
+
+
 @services_bp.route("")
 @login_required
 def index():
@@ -49,11 +61,10 @@ def index():
 @services_bp.route("/new", methods=["POST"])
 @login_required
 def create():
-    name = (request.form.get("name") or "").strip()
-    description = (request.form.get("description") or "").strip()
+    name, description = _validated_service_text(request.form.get("name"), request.form.get("description"))
     visibility = (request.form.get("visibility") or "private").strip()
     price = parse_int(request.form.get("price_cents"), default=0, minimum=0, maximum=1_000_000)
-    if visibility not in {"private", "org", "public"} or len(name) < 2:
+    if visibility not in VALID_VISIBILITY:
         abort(400)
     get_db().execute("INSERT INTO services(org_id,owner_user_id,name,description,visibility,status,price_cents) VALUES(?,?,?,?,?,'draft',?)", (current_org_id(), session["user_id"], name, description, visibility, price))
     return redirect(url_for("services.index"))
@@ -77,8 +88,9 @@ def edit(service_id):
     row = _service(service_id)
     if not row or row["owner_user_id"] != session["user_id"]:
         abort(403)
-    name = (request.form.get("name") or row["name"]).strip()
-    description = (request.form.get("description") or row["description"]).strip()
+    raw_name = row["name"] if request.form.get("name") is None else request.form.get("name")
+    raw_description = row["description"] if request.form.get("description") is None else request.form.get("description")
+    name, description = _validated_service_text(raw_name, raw_description)
     get_db().execute("UPDATE services SET name=?,description=? WHERE id=?", (name, description, service_id))
     marker = flag("LL10") if row["approved_at"] else ""
     flash("Service updated. " + marker, "success")
