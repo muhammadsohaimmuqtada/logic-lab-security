@@ -3,7 +3,7 @@ import io
 import time
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, abort, Response
 from .db import get_db
-from .security import login_required, current_org_id, membership, role_at_least, audit
+from .security import login_required, current_org_id, membership, role_at_least, audit, parse_int
 from .lab import flag
 
 services_bp = Blueprint("services", __name__, url_prefix="/services")
@@ -23,6 +23,19 @@ def _can_view(row):
     return row["visibility"] == "org" and bool(membership(org_id=row["org_id"]))
 
 
+def _consume_export_quota():
+    db = get_db()
+    org_id = current_org_id()
+    sub = db.execute("SELECT export_quota FROM subscriptions WHERE org_id=?", (org_id,)).fetchone()
+    if not sub:
+        return True, 0, None
+    used = db.execute("SELECT COALESCE(SUM(quantity),0) AS c FROM feature_usage WHERE org_id=? AND feature='tenant_export'", (org_id,)).fetchone()["c"]
+    if used >= sub["export_quota"]:
+        return False, used, sub["export_quota"]
+    db.execute("INSERT INTO feature_usage(org_id,user_id,feature,quantity,created_at) VALUES(?,?,?,?,?)", (org_id, session["user_id"], "tenant_export", 1, int(time.time())))
+    return True, used + 1, sub["export_quota"]
+
+
 @services_bp.route("")
 @login_required
 def index():
@@ -39,10 +52,7 @@ def create():
     name = (request.form.get("name") or "").strip()
     description = (request.form.get("description") or "").strip()
     visibility = (request.form.get("visibility") or "private").strip()
-    try:
-        price = max(0, min(1_000_000, int(request.form.get("price_cents") or 0)))
-    except ValueError:
-        abort(400)
+    price = parse_int(request.form.get("price_cents"), default=0, minimum=0, maximum=1_000_000)
     if visibility not in {"private", "org", "public"} or len(name) < 2:
         abort(400)
     get_db().execute("INSERT INTO services(org_id,owner_user_id,name,description,visibility,status,price_cents) VALUES(?,?,?,?,?,'draft',?)", (current_org_id(), session["user_id"], name, description, visibility, price))
@@ -56,7 +66,9 @@ def view(service_id):
     if not _can_view(row):
         abort(404)
     marker = flag(row["secret_flag"]) if row["secret_flag"] else None
-    return render_template("service_view.html", service=row, marker=marker)
+    is_owner = row["owner_user_id"] == session["user_id"]
+    can_approve = role_at_least("manager", org_id=row["org_id"])
+    return render_template("service_view.html", service=row, marker=marker, is_owner=is_owner, can_approve=can_approve)
 
 
 @services_bp.route("/<int:service_id>/edit", methods=["POST"])
@@ -77,7 +89,7 @@ def edit(service_id):
 @login_required
 def transfer(service_id):
     row = _service(service_id)
-    new_owner = int(request.form.get("new_owner_user_id") or 0)
+    new_owner = parse_int(request.form.get("new_owner_user_id"), minimum=1)
     if not row or not membership(org_id=row["org_id"]):
         abort(403)
     target = get_db().execute("SELECT 1 FROM memberships WHERE user_id=? AND org_id=?", (new_owner, row["org_id"])).fetchone()
@@ -121,7 +133,10 @@ def approve(service_id):
 @services_bp.route("/export")
 @login_required
 def export_services():
-    org_id = int(request.args.get("org_id") or current_org_id())
+    allowed, used, quota = _consume_export_quota()
+    if not allowed:
+        return {"error": "export quota exceeded", "used": used, "quota": quota}, 429
+    org_id = parse_int(request.args.get("org_id"), default=current_org_id(), minimum=1)
     rows = get_db().execute("SELECT id,name,description,status,secret_flag FROM services WHERE org_id=? ORDER BY id", (org_id,)).fetchall()
     out = io.StringIO()
     writer = csv.writer(out)
@@ -136,7 +151,7 @@ def export_services():
 @login_required
 def search():
     q = (request.args.get("q") or "").strip()
-    org_id = int(request.args.get("org_id") or current_org_id())
+    org_id = parse_int(request.args.get("org_id"), default=current_org_id(), minimum=1)
     rows = get_db().execute("SELECT id,name,description,status FROM services WHERE org_id=? AND (name LIKE ? OR description LIKE ?) ORDER BY id", (org_id, f"%{q}%", f"%{q}%")).fetchall()
     marker = None
     if rows and org_id != current_org_id() and not membership(org_id=org_id):
@@ -148,9 +163,9 @@ def search():
 @login_required
 def activity(service_id):
     service = _service(service_id)
+    if not service:
+        abort(404)
     rows = get_db().execute("SELECT * FROM activities WHERE service_id=? ORDER BY id DESC", (service_id,)).fetchall()
     audit("ACTIVITY_VIEW", f"service_id={service_id}")
-    marker = None
-    if service and rows and not _can_view(service):
-        marker = flag("LL05")
+    marker = flag("LL05") if rows and not _can_view(service) else None
     return render_template("activity.html", rows=rows, marker=marker)

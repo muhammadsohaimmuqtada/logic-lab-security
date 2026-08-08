@@ -2,13 +2,22 @@ import time
 from flask import Blueprint, abort, request, session
 from .db import get_db
 from .lab import flag
-from .security import current_org_id, login_required, membership
+from .security import current_org_id, login_required, membership, parse_int
 
 api_bp = Blueprint("api", __name__, url_prefix="/api/v1")
 
 
 def _service(service_id):
     return get_db().execute("SELECT * FROM services WHERE id=?", (service_id,)).fetchone()
+
+
+def _json_object():
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return {}
+    if not isinstance(payload, dict):
+        abort(400)
+    return payload
 
 
 @api_bp.route("/services/<int:service_id>/notes")
@@ -30,15 +39,18 @@ def update_service(service_id):
     service = _service(service_id)
     if not service:
         abort(404)
-    payload = request.get_json(silent=True) or {}
+    payload = _json_object()
     writable = ("name", "description", "visibility", "status", "owner_user_id", "org_id")
     fields = []
     params = []
     touched_sensitive = False
     for key in writable:
         if key in payload:
+            value = payload[key]
+            if key in {"owner_user_id", "org_id"}:
+                value = parse_int(value, minimum=1)
             fields.append(f"{key}=?")
-            params.append(payload[key])
+            params.append(value)
             touched_sensitive = touched_sensitive or key in {"visibility", "status", "owner_user_id", "org_id"}
     if not fields:
         return {"updated": False}
@@ -52,8 +64,11 @@ def update_service(service_id):
 @login_required
 def batch_visibility():
     db = get_db()
-    payload = request.get_json(silent=True) or {}
-    ids = [int(x) for x in payload.get("ids", [])][:20]
+    payload = _json_object()
+    raw_ids = payload.get("ids", [])
+    if not isinstance(raw_ids, list):
+        abort(400)
+    ids = [parse_int(x, minimum=1) for x in raw_ids[:20]]
     visibility = payload.get("visibility", "org")
     if not ids or visibility not in {"private", "org", "public"}:
         abort(400)
@@ -70,7 +85,7 @@ def batch_visibility():
 @api_bp.route("/partners/enroll", methods=["POST"])
 @login_required
 def partner_enroll():
-    payload = request.get_json(silent=True) or {}
+    payload = _json_object()
     email = str(payload.get("email", "")).strip().lower()
     if not email.endswith("alpha.local"):
         return {"accepted": False, "reason": "partner domain required"}, 403

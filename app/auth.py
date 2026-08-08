@@ -14,6 +14,11 @@ def _valid_username(value):
     return value if 3 <= len(value) <= 32 and all(c.isalnum() or c in "_.-" for c in value) else None
 
 
+def _restore_lab_actor(actor_id):
+    if actor_id:
+        session["lab_actor_id"] = int(actor_id)
+
+
 @auth_bp.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
@@ -55,7 +60,9 @@ def login():
         if not user or not check_password_hash(user["password_hash"], password):
             flash("Invalid credentials.", "error")
             return redirect(url_for("auth.login"))
+        actor_id = session.get("lab_actor_id")
         session.clear()
+        _restore_lab_actor(actor_id or user["id"])
         session["_csrf_token"] = csrf_token()
         session["user_id"] = user["id"]
         session["active_org_id"] = user["active_org_id"]
@@ -66,7 +73,9 @@ def login():
 
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
+    actor_id = session.get("lab_actor_id")
     session.clear()
+    _restore_lab_actor(actor_id)
     return redirect(url_for("auth.login"))
 
 
@@ -84,6 +93,7 @@ def recover():
             flash("Recovery details not recognized.", "error")
             return redirect(url_for("auth.recover"))
         get_db().execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(new_password), user["id"]))
-        flash(f"Password reset completed. Recovery audit code: {flag('LL16', user_id=user['id'])}", "success")
+        actor_id = session.get("lab_actor_id") or user["id"]
+        flash(f"Password reset completed. Recovery audit code: {flag('LL16', user_id=actor_id)}", "success")
         return redirect(url_for("auth.login"))
     return render_template("recover.html")

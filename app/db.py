@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS invitations (id INTEGER PRIMARY KEY AUTOINCREMENT,org
 CREATE TABLE IF NOT EXISTS activities (id INTEGER PRIMARY KEY AUTOINCREMENT,org_id INTEGER NOT NULL,service_id INTEGER,actor_user_id INTEGER,event TEXT NOT NULL,detail TEXT NOT NULL,created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS coupons (code TEXT PRIMARY KEY,discount_cents INTEGER NOT NULL,max_uses INTEGER NOT NULL,used_count INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS coupon_redemptions (id INTEGER PRIMARY KEY AUTOINCREMENT,code TEXT NOT NULL,user_id INTEGER NOT NULL,created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS coupon_checkout_uses (id INTEGER PRIMARY KEY AUTOINCREMENT,code TEXT NOT NULL,user_id INTEGER NOT NULL,order_id INTEGER NOT NULL,created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT,buyer_user_id INTEGER NOT NULL,service_id INTEGER NOT NULL,list_price_cents INTEGER NOT NULL,paid_cents INTEGER NOT NULL,coupon_codes TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'paid',created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS refunds (id INTEGER PRIMARY KEY AUTOINCREMENT,order_id INTEGER NOT NULL,user_id INTEGER NOT NULL,amount_cents INTEGER NOT NULL,created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS referral_events (id INTEGER PRIMARY KEY AUTOINCREMENT,referrer_user_id INTEGER NOT NULL,referred_user_id INTEGER NOT NULL,reward_cents INTEGER NOT NULL,created_at INTEGER NOT NULL);
@@ -20,6 +21,12 @@ CREATE TABLE IF NOT EXISTS challenge_progress (user_id INTEGER NOT NULL REFERENC
 CREATE TABLE IF NOT EXISTS challenge_hints (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,challenge_id TEXT NOT NULL,hint_index INTEGER NOT NULL,created_at INTEGER NOT NULL,UNIQUE (user_id, challenge_id, hint_index));
 CREATE TABLE IF NOT EXISTS subscriptions (org_id INTEGER PRIMARY KEY REFERENCES orgs(id) ON DELETE CASCADE,plan TEXT NOT NULL,seat_limit INTEGER NOT NULL,export_quota INTEGER NOT NULL,trial_started_at INTEGER NOT NULL,trial_ends_at INTEGER NOT NULL,trial_extensions INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS feature_usage (id INTEGER PRIMARY KEY AUTOINCREMENT,org_id INTEGER NOT NULL,user_id INTEGER NOT NULL,feature TEXT NOT NULL,quantity INTEGER NOT NULL DEFAULT 1,created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_memberships_org ON memberships(org_id);
+CREATE INDEX IF NOT EXISTS idx_services_org ON services(org_id);
+CREATE INDEX IF NOT EXISTS idx_invitations_org ON invitations(org_id);
+CREATE INDEX IF NOT EXISTS idx_activities_service ON activities(service_id);
+CREATE INDEX IF NOT EXISTS idx_feature_usage_org_feature ON feature_usage(org_id,feature);
+CREATE INDEX IF NOT EXISTS idx_coupon_checkout_uses_code ON coupon_checkout_uses(code);
 """
 
 
@@ -48,9 +55,15 @@ def close_db(_exc=None):
 def init_db():
     conn = get_db()
     conn.executescript(SCHEMA)
-    seed_demo(conn)
-    ensure_demo_extensions(conn)
-    migrate_static_markers(conn)
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        seed_demo(conn)
+        ensure_demo_extensions(conn)
+        migrate_demo_data(conn)
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
 
 
 def _insert_user(conn, username, email, org_id, role, referral_code, *, admin=False, credits=10000):
@@ -80,8 +93,8 @@ def seed_demo(conn):
     conn.execute("INSERT INTO services(org_id,owner_user_id,name,description,visibility,status,price_cents,secret_flag) VALUES(?,?,?,?,?,?,?,?)", (gamma, student, "Starter Compliance Checklist", "GammaLabs starter-plan checklist", "org", "draft", 4000, ""))
     conn.execute("INSERT INTO activities(org_id,service_id,actor_user_id,event,detail,created_at) VALUES(?,?,?,?,?,?)", (beta, s2, carol, "SERVICE_NOTE", "Customer escalation evidence is attached to this service.", int(time.time())))
     conn.execute("INSERT INTO activities(org_id,service_id,actor_user_id,event,detail,created_at) VALUES(?,?,?,?,?,?)", (alpha, s1, alice, "TENANT_CONTEXT", "AlphaSec context marker retained by the capability cache.", int(time.time())))
-    conn.execute("INSERT INTO invitations(org_id,email,role,token,revoked,used_at) VALUES(?,?,?,?,?,?)", (alpha, "contractor@example.local", "viewer", "ALPHA-ARCHIVED-INVITE", 1, int(time.time()) - 86400))
-    conn.execute("INSERT INTO invitations(org_id,email,role,token,revoked,used_at) VALUES(?,?,?,?,?,?)", (beta, "analyst@example.local", "member", "BETA-USED-INVITE", 0, int(time.time()) - 3600))
+    conn.execute("INSERT INTO invitations(org_id,email,role,token,revoked,used_at) VALUES(?,?,?,?,?,?)", (alpha, "student@gamma.local", "viewer", "ALPHA-ARCHIVED-INVITE", 1, int(time.time()) - 86400))
+    conn.execute("INSERT INTO invitations(org_id,email,role,token,revoked,used_at) VALUES(?,?,?,?,?,?)", (beta, "student@gamma.local", "member", "BETA-USED-INVITE", 0, int(time.time()) - 3600))
     conn.execute("INSERT INTO coupons(code,discount_cents,max_uses,used_count) VALUES(?,?,?,?)", ("ONCE50", 5000, 1, 0))
     conn.execute("INSERT INTO coupons(code,discount_cents,max_uses,used_count) VALUES(?,?,?,?)", ("STACK20", 2000, 100, 0))
     conn.execute("INSERT INTO coupons(code,discount_cents,max_uses,used_count) VALUES(?,?,?,?)", ("RACE1", 1000, 1, 0))
@@ -97,11 +110,12 @@ def ensure_demo_extensions(conn):
             conn.execute("INSERT INTO subscriptions(org_id,plan,seat_limit,export_quota,trial_started_at,trial_ends_at,trial_extensions) VALUES(?,?,?,?,?,?,0) ON CONFLICT(org_id) DO NOTHING", (org["id"], plan, seat_limit, export_quota, now - 3 * 86400, now + 11 * 86400))
 
 
-def migrate_static_markers(conn):
+def migrate_demo_data(conn):
     conn.execute("UPDATE services SET secret_flag='LL01' WHERE name='Internal Red-Team Playbook' AND secret_flag LIKE 'FLAG{%}'")
     conn.execute("UPDATE services SET secret_flag='LL02' WHERE name='Incident Retainer' AND secret_flag LIKE 'FLAG{%}'")
     conn.execute("UPDATE activities SET detail='Customer escalation evidence is attached to this service.' WHERE event='SERVICE_NOTE' AND detail LIKE '%FLAG{%}'")
     conn.execute("UPDATE activities SET detail='AlphaSec context marker retained by the capability cache.' WHERE event='TENANT_CONTEXT' AND detail LIKE '%FLAG{%}'")
+    conn.execute("UPDATE invitations SET email='student@gamma.local' WHERE token IN ('ALPHA-ARCHIVED-INVITE','BETA-USED-INVITE')")
 
 
 def reset_database(path):
@@ -109,7 +123,14 @@ def reset_database(path):
         path.unlink()
     conn = _connect(path)
     conn.executescript(SCHEMA)
-    seed_demo(conn)
-    ensure_demo_extensions(conn)
-    migrate_static_markers(conn)
-    conn.close()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        seed_demo(conn)
+        ensure_demo_extensions(conn)
+        migrate_demo_data(conn)
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()

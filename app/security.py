@@ -27,6 +27,23 @@ def csrf_protect():
     return None
 
 
+def parse_int(value, *, default=None, minimum=None, maximum=None):
+    if value in (None, ""):
+        if default is None:
+            abort(400)
+        number = int(default)
+    else:
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            abort(400)
+    if minimum is not None and number < minimum:
+        abort(400)
+    if maximum is not None and number > maximum:
+        abort(400)
+    return number
+
+
 def client_ip():
     return request.remote_addr or "unknown"
 

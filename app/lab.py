@@ -50,12 +50,16 @@ CHALLENGES = [
 CHALLENGE_MAP = {c["id"]: c for c in CHALLENGES}
 
 
+def actor_user_id():
+    if not has_request_context():
+        return 0
+    return int(session.get("lab_actor_id") or session.get("user_id") or 0)
+
+
 def _user_id(user_id=None):
     if user_id is not None:
         return int(user_id)
-    if has_request_context() and session.get("user_id"):
-        return int(session["user_id"])
-    return 0
+    return actor_user_id()
 
 
 def flag(challenge_id: str, *, user_id=None) -> str:
@@ -80,7 +84,7 @@ def challenge_points(challenge_id, hint_count=0):
 
 @lab_bp.route("/lab")
 def index():
-    uid = session.get("user_id")
+    uid = actor_user_id() or None
     solved = {}
     hint_counts = {}
     total_score = 0
@@ -105,23 +109,24 @@ def index():
 def submit_flag():
     if not session.get("user_id"):
         return redirect(url_for("auth.login"))
+    actor_id = actor_user_id()
     challenge_id = (request.form.get("challenge_id") or "").upper().strip()
     submitted = (request.form.get("flag") or "").strip()
     if challenge_id not in CHALLENGE_MAP:
         flash("Unknown challenge.", "error")
         return redirect(url_for("lab.index"))
-    expected = flag(challenge_id, user_id=session["user_id"])
+    expected = flag(challenge_id, user_id=actor_id)
     if not hmac.compare_digest(submitted, expected):
         flash("Flag rejected.", "error")
         return redirect(url_for("lab.index"))
     db = _db()
-    existing = db.execute("SELECT 1 FROM challenge_progress WHERE user_id=? AND challenge_id=?", (session["user_id"], challenge_id)).fetchone()
+    existing = db.execute("SELECT 1 FROM challenge_progress WHERE user_id=? AND challenge_id=?", (actor_id, challenge_id)).fetchone()
     if existing:
         flash(f"{challenge_id} was already solved.", "success")
         return redirect(url_for("lab.index"))
-    hint_count = db.execute("SELECT COUNT(*) AS c FROM challenge_hints WHERE user_id=? AND challenge_id=?", (session["user_id"], challenge_id)).fetchone()["c"]
+    hint_count = db.execute("SELECT COUNT(*) AS c FROM challenge_hints WHERE user_id=? AND challenge_id=?", (actor_id, challenge_id)).fetchone()["c"]
     points = challenge_points(challenge_id, hint_count)
-    db.execute("INSERT INTO challenge_progress(user_id,challenge_id,solved_at,points_awarded) VALUES(?,?,?,?)", (session["user_id"], challenge_id, int(time.time()), points))
+    db.execute("INSERT INTO challenge_progress(user_id,challenge_id,solved_at,points_awarded) VALUES(?,?,?,?)", (actor_id, challenge_id, int(time.time()), points))
     flash(f"{challenge_id} solved for {points} points.", "success")
     return redirect(url_for("lab.index"))
 
@@ -130,16 +135,17 @@ def submit_flag():
 def use_hint(challenge_id):
     if not session.get("user_id"):
         return redirect(url_for("auth.login"))
+    actor_id = actor_user_id()
     challenge_id = challenge_id.upper()
     challenge = CHALLENGE_MAP.get(challenge_id)
     if not challenge:
         abort(404)
     db = _db()
-    used = db.execute("SELECT COUNT(*) AS c FROM challenge_hints WHERE user_id=? AND challenge_id=?", (session["user_id"], challenge_id)).fetchone()["c"]
+    used = db.execute("SELECT COUNT(*) AS c FROM challenge_hints WHERE user_id=? AND challenge_id=?", (actor_id, challenge_id)).fetchone()["c"]
     if used >= len(challenge["hints"]):
         flash("No more hints are available for this challenge.", "error")
         return redirect(url_for("lab.index"))
-    db.execute("INSERT INTO challenge_hints(user_id,challenge_id,hint_index,created_at) VALUES(?,?,?,?)", (session["user_id"], challenge_id, used, int(time.time())))
+    db.execute("INSERT INTO challenge_hints(user_id,challenge_id,hint_index,created_at) VALUES(?,?,?,?)", (actor_id, challenge_id, used, int(time.time())))
     flash(f"Hint unlocked for {challenge_id}. Future solve value reduced by {HINT_COST} points.", "success")
     return redirect(url_for("lab.index"))
 
@@ -148,5 +154,6 @@ def use_hint(challenge_id):
 def progress():
     if not session.get("user_id"):
         return {"authenticated": False, "solved": 0, "score": 0}
-    rows = _db().execute("SELECT challenge_id,solved_at,points_awarded FROM challenge_progress WHERE user_id=? ORDER BY solved_at", (session["user_id"],)).fetchall()
+    actor_id = actor_user_id()
+    rows = _db().execute("SELECT challenge_id,solved_at,points_awarded FROM challenge_progress WHERE user_id=? ORDER BY solved_at", (actor_id,)).fetchall()
     return {"authenticated": True, "solved": len(rows), "score": sum(r["points_awarded"] for r in rows), "challenges": [dict(r) for r in rows]}

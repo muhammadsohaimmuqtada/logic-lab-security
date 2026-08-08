@@ -1,28 +1,28 @@
 version: 3
 challenge_count: 25
 challenges:
-  - {id: LL01, source: app/lab.py}
-  - {id: LL02, source: app/lab.py}
-  - {id: LL03, source: app/lab.py}
-  - {id: LL04, source: app/lab.py}
-  - {id: LL05, source: app/lab.py}
-  - {id: LL06, source: app/lab.py}
-  - {id: LL07, source: app/lab.py}
-  - {id: LL08, source: app/lab.py}
-  - {id: LL09, source: app/lab.py}
-  - {id: LL10, source: app/lab.py}
-  - {id: LL11, source: app/lab.py}
-  - {id: LL12, source: app/lab.py}
-  - {id: LL13, source: app/lab.py}
-  - {id: LL14, source: app/lab.py}
-  - {id: LL15, source: app/lab.py}
-  - {id: LL16, source: app/lab.py}
-  - {id: LL17, source: app/lab.py}
-  - {id: LL18, source: app/entitlements.py}
-  - {id: LL19, source: app/entitlements.py}
-  - {id: LL20, source: app/entitlements.py}
-  - {id: LL21, source: app/api.py}
-  - {id: LL22, source: app/api.py}
-  - {id: LL23, source: app/api.py}
-  - {id: LL24, source: app/api.py}
-  - {id: LL25, source: app/api.py}
+  - {id: LL01, source: app/auth.py, category: tenancy}
+  - {id: LL02, source: app/services.py, category: tenancy}
+  - {id: LL03, source: app/services.py, category: tenancy}
+  - {id: LL04, source: app/organizations.py, category: authorization-lifecycle}
+  - {id: LL05, source: app/services.py, category: object-authorization}
+  - {id: LL06, source: app/services.py, category: ownership}
+  - {id: LL07, source: app/organizations.py, category: identity}
+  - {id: LL08, source: app/organizations.py, category: identity-lifecycle}
+  - {id: LL09, source: app/services.py, category: workflow}
+  - {id: LL10, source: app/services.py, category: approval-integrity}
+  - {id: LL11, source: app/commerce.py, category: commerce}
+  - {id: LL12, source: app/commerce.py, category: promotions}
+  - {id: LL13, source: app/commerce.py, category: referrals}
+  - {id: LL14, source: app/commerce.py, category: refunds}
+  - {id: LL15, source: app/services.py, category: separation-of-duties}
+  - {id: LL16, source: app/auth.py, category: recovery}
+  - {id: LL17, source: app/commerce.py, category: concurrency}
+  - {id: LL18, source: app/entitlements.py, category: entitlements}
+  - {id: LL19, source: app/entitlements.py, category: quotas}
+  - {id: LL20, source: app/entitlements.py, category: lifecycle}
+  - {id: LL21, source: app/api.py, category: api-object-authorization}
+  - {id: LL22, source: app/api.py, category: api-property-authorization}
+  - {id: LL23, source: app/api.py, category: api-batch-authorization}
+  - {id: LL24, source: app/api.py, category: identity-boundary}
+  - {id: LL25, source: app/api.py, category: business-flow-quota}

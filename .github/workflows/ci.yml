@@ -9,8 +9,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -18,8 +18,60 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Compile
         run: python -m compileall app tests scripts
-      - name: Run lab contract tests
+      - name: Run lab contract and regression tests
         env:
           FLASK_SECRET_KEY: ci-logic-lab-secret
+          LAB_FLAG_SECRET: ci-logic-lab-flag-secret
           LAB_MODE: "1"
         run: pytest -q
+      - name: Build learner bundle
+        run: |
+          python scripts/build_learner_bundle.py
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+          bundle = Path('dist/logic-lab-learner.zip')
+          assert bundle.exists()
+          with zipfile.ZipFile(bundle) as zf:
+              names = set(zf.namelist())
+          for forbidden in (
+              'docs/INSTRUCTOR_GUIDE.md',
+              'challenges/manifest.yml',
+              'tests/test_challenge_contracts.py',
+              'tests/test_expansion_contracts.py',
+          ):
+              assert forbidden not in names, forbidden
+          print(f'learner bundle: {len(names)} files')
+          PY
+      - name: Build container
+        run: docker build -t logic-lab-ci .
+      - name: Smoke-test container
+        run: |
+          set -euo pipefail
+          docker run -d --name logic-lab-ci-run \
+            -e GUNICORN_BIND=0.0.0.0:8000 \
+            -p 127.0.0.1:18000:8000 \
+            logic-lab-ci
+          cleanup() {
+            docker logs logic-lab-ci-run || true
+            docker rm -f logic-lab-ci-run >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          python - <<'PY'
+          import json
+          import time
+          import urllib.request
+          last = None
+          for _ in range(30):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:18000/health', timeout=2) as response:
+                      data = json.load(response)
+                  assert data == {'status': 'ok', 'lab_mode': True}
+                  print('container health: ok')
+                  break
+              except Exception as exc:
+                  last = exc
+                  time.sleep(1)
+          else:
+              raise SystemExit(f'container failed health check: {last}')
+          PY
