@@ -2,7 +2,7 @@ import secrets
 import time
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, abort
 from .db import get_db
-from .security import login_required, role_required, current_org_id, membership
+from .security import login_required, role_required, role_at_least, current_org_id, membership, current_user
 from .lab import flag
 
 org_bp = Blueprint("orgs", __name__, url_prefix="/org")
@@ -15,8 +15,9 @@ def dashboard():
     uid = session["user_id"]
     memberships = db.execute("SELECT m.*, o.name FROM memberships m JOIN orgs o ON o.id=m.org_id WHERE m.user_id=? ORDER BY o.name", (uid,)).fetchall()
     active = db.execute("SELECT * FROM orgs WHERE id=?", (current_org_id(),)).fetchone()
-    invites = db.execute("SELECT * FROM invitations WHERE org_id=? ORDER BY id DESC LIMIT 20", (current_org_id(),)).fetchall()
-    return render_template("org.html", memberships=memberships, active=active, invites=invites)
+    can_manage_invites = role_at_least("manager")
+    invites = db.execute("SELECT * FROM invitations WHERE org_id=? ORDER BY id DESC LIMIT 20", (current_org_id(),)).fetchall() if can_manage_invites else []
+    return render_template("org.html", memberships=memberships, active=active, invites=invites, can_manage_invites=can_manage_invites)
 
 
 @org_bp.route("/switch/<int:org_id>", methods=["POST"])
@@ -45,8 +46,16 @@ def create_invite():
     role = (request.form.get("role") or "member").strip().lower()
     if role not in {"viewer", "member", "manager"} or "@" not in email:
         abort(400)
+    db = get_db()
+    sub = db.execute("SELECT * FROM subscriptions WHERE org_id=?", (current_org_id(),)).fetchone()
+    if sub:
+        members = db.execute("SELECT COUNT(*) AS c FROM memberships WHERE org_id=?", (current_org_id(),)).fetchone()["c"]
+        pending = db.execute("SELECT COUNT(*) AS c FROM invitations WHERE org_id=? AND revoked=0 AND used_at IS NULL", (current_org_id(),)).fetchone()["c"]
+        if members + pending >= sub["seat_limit"]:
+            flash("No seat capacity is currently available.", "error")
+            return redirect(url_for("orgs.dashboard"))
     token = secrets.token_urlsafe(18)
-    get_db().execute("INSERT INTO invitations(org_id,email,role,token,revoked,used_at) VALUES(?,?,?,?,0,NULL)", (current_org_id(), email, role, token))
+    db.execute("INSERT INTO invitations(org_id,email,role,token,revoked,used_at) VALUES(?,?,?,?,0,NULL)", (current_org_id(), email, role, token))
     flash(f"Invitation created: {token}", "success")
     return redirect(url_for("orgs.dashboard"))
 
@@ -65,13 +74,18 @@ def accept_invite():
     if request.method == "POST":
         token = (request.form.get("token") or "").strip()
         requested_role = (request.form.get("role") or "").strip().lower()
-        invite = get_db().execute("SELECT * FROM invitations WHERE token=?", (token,)).fetchone()
+        db = get_db()
+        invite = db.execute("SELECT * FROM invitations WHERE token=?", (token,)).fetchone()
         if not invite:
             flash("Invitation not found.", "error")
             return redirect(url_for("orgs.accept_invite"))
+        user = current_user()
+        if not user or user["email"].lower() != invite["email"].lower():
+            abort(403)
         role = requested_role if requested_role in {"viewer", "member", "manager", "owner"} else invite["role"]
-        get_db().execute("INSERT INTO memberships(user_id,org_id,role) VALUES(?,?,?) ON CONFLICT(user_id,org_id) DO UPDATE SET role=excluded.role", (session["user_id"], invite["org_id"], role))
-        get_db().execute("UPDATE invitations SET used_at=? WHERE id=?", (int(time.time()), invite["id"]))
+        db.execute("INSERT INTO memberships(user_id,org_id,role) VALUES(?,?,?) ON CONFLICT(user_id,org_id) DO UPDATE SET role=excluded.role", (session["user_id"], invite["org_id"], role))
+        db.execute("UPDATE invitations SET used_at=? WHERE id=?", (int(time.time()), invite["id"]))
+        db.execute("UPDATE users SET active_org_id=? WHERE id=?", (invite["org_id"], session["user_id"]))
         session["active_org_id"] = invite["org_id"]
         marker = []
         if requested_role and role != invite["role"]:
