@@ -130,13 +130,13 @@ def approve(service_id):
     return redirect(url_for("services.view", service_id=service_id))
 
 
-@services_bp.route("/export")
+@services_bp.route("/export", methods=["POST"])
 @login_required
 def export_services():
     allowed, used, quota = _consume_export_quota()
     if not allowed:
         return {"error": "export quota exceeded", "used": used, "quota": quota}, 429
-    org_id = parse_int(request.args.get("org_id"), default=current_org_id(), minimum=1)
+    org_id = parse_int(request.form.get("org_id"), default=current_org_id(), minimum=1)
     rows = get_db().execute("SELECT id,name,description,status,secret_flag FROM services WHERE org_id=? ORDER BY id", (org_id,)).fetchall()
     out = io.StringIO()
     writer = csv.writer(out)
