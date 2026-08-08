@@ -32,11 +32,17 @@ def parse_int(value, *, default=None, minimum=None, maximum=None):
         if default is None:
             abort(400)
         number = int(default)
-    else:
+    elif isinstance(value, bool):
+        abort(400)
+    elif isinstance(value, int):
+        number = value
+    elif isinstance(value, str):
         try:
-            number = int(value)
+            number = int(value.strip())
         except (TypeError, ValueError):
             abort(400)
+    else:
+        abort(400)
     if minimum is not None and number < minimum:
         abort(400)
     if maximum is not None and number > maximum:
