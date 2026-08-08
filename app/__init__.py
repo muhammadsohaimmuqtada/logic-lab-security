@@ -12,12 +12,16 @@ def create_app(config_object=None):
     from .organizations import org_bp
     from .services import services_bp
     from .commerce import commerce_bp
+    from .entitlements import entitlements_bp
+    from .api import api_bp
     from .lab import lab_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(org_bp)
     app.register_blueprint(services_bp)
     app.register_blueprint(commerce_bp)
+    app.register_blueprint(entitlements_bp)
+    app.register_blueprint(api_bp)
     app.register_blueprint(lab_bp)
 
     app.jinja_env.globals["csrf_token"] = csrf_token

@@ -12,10 +12,7 @@ commerce_bp = Blueprint("commerce", __name__, url_prefix="/commerce")
 @login_required
 def index():
     db = get_db()
-    orders = db.execute(
-        "SELECT o.*, s.name FROM orders o JOIN services s ON s.id=o.service_id WHERE o.buyer_user_id=? ORDER BY o.id DESC",
-        (session["user_id"],),
-    ).fetchall()
+    orders = db.execute("SELECT o.*, s.name FROM orders o JOIN services s ON s.id=o.service_id WHERE o.buyer_user_id=? ORDER BY o.id DESC", (session["user_id"],)).fetchall()
     user = db.execute("SELECT * FROM users WHERE id=?", (session["user_id"],)).fetchone()
     return render_template("commerce.html", orders=orders, user=user)
 
@@ -32,7 +29,6 @@ def checkout():
         submitted_price = max(0, int(request.form.get("price_cents") or service["price_cents"]))
     except ValueError:
         abort(400)
-
     coupon_codes = [x.strip().upper() for x in (request.form.get("coupon_codes") or "").split(",") if x.strip()]
     discount = 0
     valid_codes = []
@@ -41,17 +37,13 @@ def checkout():
         if coupon and coupon["used_count"] < coupon["max_uses"]:
             discount += coupon["discount_cents"]
             valid_codes.append(code)
-
     paid = max(0, submitted_price - discount)
     user = db.execute("SELECT * FROM users WHERE id=?", (session["user_id"],)).fetchone()
     if user["credits"] < paid:
         flash("Insufficient credits.", "error")
         return redirect(url_for("commerce.index"))
     db.execute("UPDATE users SET credits=credits-? WHERE id=?", (paid, session["user_id"]))
-    db.execute(
-        "INSERT INTO orders(buyer_user_id,service_id,list_price_cents,paid_cents,coupon_codes,status,created_at) VALUES(?,?,?,?,?,'paid',?)",
-        (session["user_id"], service_id, service["price_cents"], paid, ",".join(valid_codes), int(time.time())),
-    )
+    db.execute("INSERT INTO orders(buyer_user_id,service_id,list_price_cents,paid_cents,coupon_codes,status,created_at) VALUES(?,?,?,?,?,'paid',?)", (session["user_id"], service_id, service["price_cents"], paid, ",".join(valid_codes), int(time.time())))
     markers = []
     if submitted_price < service["price_cents"]:
         markers.append(flag("LL11"))
@@ -72,10 +64,7 @@ def referral():
         return redirect(url_for("commerce.index"))
     reward = 1000
     db.execute("UPDATE users SET credits=credits+? WHERE id IN (?,?)", (reward, referrer["id"], session["user_id"]))
-    db.execute(
-        "INSERT INTO referral_events(referrer_user_id,referred_user_id,reward_cents,created_at) VALUES(?,?,?,?)",
-        (referrer["id"], session["user_id"], reward, int(time.time())),
-    )
+    db.execute("INSERT INTO referral_events(referrer_user_id,referred_user_id,reward_cents,created_at) VALUES(?,?,?,?)", (referrer["id"], session["user_id"], reward, int(time.time())))
     marker = flag("LL13") if referrer["id"] == session["user_id"] else ""
     flash("Referral reward applied. " + marker, "success")
     return redirect(url_for("commerce.index"))
@@ -90,10 +79,7 @@ def refund(order_id):
         abort(404)
     previous = db.execute("SELECT COUNT(*) AS c FROM refunds WHERE order_id=?", (order_id,)).fetchone()["c"]
     db.execute("UPDATE users SET credits=credits+? WHERE id=?", (order["paid_cents"], session["user_id"]))
-    db.execute(
-        "INSERT INTO refunds(order_id,user_id,amount_cents,created_at) VALUES(?,?,?,?)",
-        (order_id, session["user_id"], order["paid_cents"], int(time.time())),
-    )
+    db.execute("INSERT INTO refunds(order_id,user_id,amount_cents,created_at) VALUES(?,?,?,?)", (order_id, session["user_id"], order["paid_cents"], int(time.time())))
     flash("Refund issued. " + (flag("LL14") if previous else ""), "success")
     return redirect(url_for("commerce.index"))
 

@@ -2,6 +2,8 @@ import pytest
 from pathlib import Path
 from app import create_app
 from app.config import TestingConfig
+from app.db import get_db
+from app.lab import flag
 
 
 @pytest.fixture()
@@ -28,13 +30,20 @@ def csrf(client):
 
 def login(client, username, password="Password1!"):
     token = csrf(client)
-    return client.post(
-        "/login",
-        data={"username": username, "password": password, "csrf_token": token},
-        follow_redirects=True,
-    )
+    return client.post("/login", data={"username": username, "password": password, "csrf_token": token}, follow_redirects=True)
 
 
 def logout(client):
     token = csrf(client)
     return client.post("/logout", data={"csrf_token": token}, follow_redirects=True)
+
+
+def expected_flag(app, challenge_id, username):
+    with app.app_context():
+        user = get_db().execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()
+        assert user
+        return flag(challenge_id, user_id=user["id"])
+
+
+def api_headers(client):
+    return {"X-CSRF-Token": csrf(client)}

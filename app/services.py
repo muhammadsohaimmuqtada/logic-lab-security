@@ -29,10 +29,7 @@ def index():
     db = get_db()
     uid = session["user_id"]
     org_id = current_org_id()
-    rows = db.execute(
-        "SELECT * FROM services WHERE visibility='public' OR owner_user_id=? OR (visibility='org' AND org_id=?) ORDER BY id",
-        (uid, org_id),
-    ).fetchall()
+    rows = db.execute("SELECT * FROM services WHERE visibility='public' OR owner_user_id=? OR (visibility='org' AND org_id=?) ORDER BY id", (uid, org_id)).fetchall()
     return render_template("services.html", services=rows)
 
 
@@ -48,10 +45,7 @@ def create():
         abort(400)
     if visibility not in {"private", "org", "public"} or len(name) < 2:
         abort(400)
-    get_db().execute(
-        "INSERT INTO services(org_id,owner_user_id,name,description,visibility,status,price_cents) VALUES(?,?,?,?,?,'draft',?)",
-        (current_org_id(), session["user_id"], name, description, visibility, price),
-    )
+    get_db().execute("INSERT INTO services(org_id,owner_user_id,name,description,visibility,status,price_cents) VALUES(?,?,?,?,?,'draft',?)", (current_org_id(), session["user_id"], name, description, visibility, price))
     return redirect(url_for("services.index"))
 
 
@@ -61,7 +55,8 @@ def view(service_id):
     row = _service(service_id)
     if not _can_view(row):
         abort(404)
-    return render_template("service_view.html", service=row)
+    marker = flag(row["secret_flag"]) if row["secret_flag"] else None
+    return render_template("service_view.html", service=row, marker=marker)
 
 
 @services_bp.route("/<int:service_id>/edit", methods=["POST"])
@@ -117,10 +112,7 @@ def approve(service_id):
     row = _service(service_id)
     if not row or not role_at_least("manager", org_id=row["org_id"]):
         abort(403)
-    get_db().execute(
-        "UPDATE services SET status='approved',approved_at=?,approved_by=? WHERE id=?",
-        (int(time.time()), session["user_id"], service_id),
-    )
+    get_db().execute("UPDATE services SET status='approved',approved_at=?,approved_by=? WHERE id=?", (int(time.time()), session["user_id"], service_id))
     marker = flag("LL15") if row["owner_user_id"] == session["user_id"] else ""
     flash("Service approved. " + marker, "success")
     return redirect(url_for("services.view", service_id=service_id))
@@ -135,7 +127,8 @@ def export_services():
     writer = csv.writer(out)
     writer.writerow(["id", "name", "description", "status", "marker"])
     for r in rows:
-        writer.writerow([r["id"], r["name"], r["description"], r["status"], r["secret_flag"]])
+        marker = flag(r["secret_flag"]) if r["secret_flag"] else ""
+        writer.writerow([r["id"], r["name"], r["description"], r["status"], marker])
     return Response(out.getvalue(), mimetype="text/csv")
 
 
@@ -144,16 +137,20 @@ def export_services():
 def search():
     q = (request.args.get("q") or "").strip()
     org_id = int(request.args.get("org_id") or current_org_id())
-    rows = get_db().execute(
-        "SELECT id,name,description,status FROM services WHERE org_id=? AND (name LIKE ? OR description LIKE ?) ORDER BY id",
-        (org_id, f"%{q}%", f"%{q}%"),
-    ).fetchall()
-    return render_template("search.html", rows=rows, q=q)
+    rows = get_db().execute("SELECT id,name,description,status FROM services WHERE org_id=? AND (name LIKE ? OR description LIKE ?) ORDER BY id", (org_id, f"%{q}%", f"%{q}%")).fetchall()
+    marker = None
+    if rows and org_id != current_org_id() and not membership(org_id=org_id):
+        marker = flag("LL03")
+    return render_template("search.html", rows=rows, q=q, marker=marker)
 
 
 @services_bp.route("/<int:service_id>/activity")
 @login_required
 def activity(service_id):
+    service = _service(service_id)
     rows = get_db().execute("SELECT * FROM activities WHERE service_id=? ORDER BY id DESC", (service_id,)).fetchall()
     audit("ACTIVITY_VIEW", f"service_id={service_id}")
-    return render_template("activity.html", rows=rows)
+    marker = None
+    if service and rows and not _can_view(service):
+        marker = flag("LL05")
+    return render_template("activity.html", rows=rows, marker=marker)

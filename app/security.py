@@ -6,6 +6,7 @@ from flask import request, session, redirect, url_for, abort
 from .db import get_db
 
 ROLE_ORDER = {"viewer": 10, "member": 20, "manager": 30, "owner": 40}
+STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
 def csrf_token():
@@ -17,7 +18,7 @@ def csrf_token():
 
 
 def csrf_protect():
-    if request.method != "POST":
+    if request.method not in STATE_CHANGING_METHODS:
         return None
     supplied = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token") or ""
     expected = session.get("_csrf_token") or ""
