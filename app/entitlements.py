@@ -3,7 +3,7 @@ import time
 from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
 from .db import get_db
 from .lab import flag
-from .security import current_org_id, login_required, parse_int
+from .security import current_org_id, login_required, role_at_least, role_required, parse_int
 
 entitlements_bp = Blueprint("entitlements", __name__, url_prefix="/entitlements")
 
@@ -20,7 +20,15 @@ def index():
     members = db.execute("SELECT COUNT(*) AS c FROM memberships WHERE org_id=?", (current_org_id(),)).fetchone()["c"]
     pending = db.execute("SELECT COUNT(*) AS c FROM invitations WHERE org_id=? AND revoked=0 AND used_at IS NULL", (current_org_id(),)).fetchone()["c"]
     exports = db.execute("SELECT COALESCE(SUM(quantity),0) AS c FROM feature_usage WHERE org_id=? AND feature='tenant_export'", (current_org_id(),)).fetchone()["c"]
-    return render_template("entitlements.html", sub=sub, members=members, pending=pending, exports=exports, marker=None)
+    return render_template(
+        "entitlements.html",
+        sub=sub,
+        members=members,
+        pending=pending,
+        exports=exports,
+        marker=None,
+        can_manage=role_at_least("manager"),
+    )
 
 
 @entitlements_bp.route("/premium-report")
@@ -31,11 +39,11 @@ def premium_report():
         abort(404)
     marker = flag("LL18") if sub["plan"] != "enterprise" else None
     report = "Organization-wide executive risk forecast and portfolio telemetry."
-    return render_template("entitlements.html", sub=sub, members=None, pending=None, exports=None, marker=marker, premium_report=report)
+    return render_template("entitlements.html", sub=sub, members=None, pending=None, exports=None, marker=marker, premium_report=report, can_manage=False)
 
 
 @entitlements_bp.route("/bulk-invite", methods=["POST"])
-@login_required
+@role_required("manager")
 def bulk_invite():
     db = get_db()
     sub = _subscription()
@@ -56,7 +64,7 @@ def bulk_invite():
 
 
 @entitlements_bp.route("/trial/extend", methods=["POST"])
-@login_required
+@role_required("manager")
 def extend_trial():
     db = get_db()
     sub = _subscription()
@@ -70,7 +78,7 @@ def extend_trial():
     return redirect(url_for("entitlements.index"))
 
 
-@entitlements_bp.route("/export")
+@entitlements_bp.route("/export", methods=["POST"])
 @login_required
 def quota_export():
     db = get_db()

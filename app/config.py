@@ -38,7 +38,6 @@ def _load_or_create_secret(env_name: str, filename: str) -> str:
 
 class Config:
     DATABASE_PATH = Path(os.environ.get("DATABASE_PATH", INSTANCE_DIR / "logiclab.db"))
-    SECURITY_LOG_PATH = Path(os.environ.get("SECURITY_LOG_PATH", INSTANCE_DIR / "security.log"))
     SECRET_KEY = _load_or_create_secret("FLASK_SECRET_KEY", ".flask-secret")
     LAB_FLAG_SECRET = _load_or_create_secret("LAB_FLAG_SECRET", ".flag-secret")
     LAB_MODE = os.environ.get("LAB_MODE", "1") == "1"
