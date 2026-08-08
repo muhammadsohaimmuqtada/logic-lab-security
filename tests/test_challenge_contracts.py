@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from tests.conftest import csrf, expected_flag, login
+from tests.conftest import csrf, expected_flag, login, logout
 from app.commerce import racy_redeem
 from app.db import get_db
 
@@ -19,7 +19,8 @@ def test_ll01_tenant_self_enrollment(app, client):
 
 def test_ll02_cross_tenant_export(app, client):
     login(client, "student")
-    r = client.get("/services/export?org_id=2")
+    token = csrf(client)
+    r = client.post("/services/export", data={"org_id": "2", "csrf_token": token})
     assert expected_flag(app, "LL02", "student").encode() in r.data
 
 
@@ -119,9 +120,11 @@ def test_ll15_owner_can_approve_own_work(app, client):
 
 
 def test_ll16_org_knowledge_is_enough_for_recovery(app, client):
+    login(client, "student")
+    logout(client)
     token = csrf(client)
     r = client.post("/recover", data={"username": "carol", "org_name": "BetaOps", "new_password": "NewPassword1!", "csrf_token": token}, follow_redirects=True)
-    assert expected_flag(app, "LL16", "carol").encode() in r.data
+    assert expected_flag(app, "LL16", "student").encode() in r.data
 
 
 def test_ll17_concurrent_redemption_exceeds_recorded_usage(app):
