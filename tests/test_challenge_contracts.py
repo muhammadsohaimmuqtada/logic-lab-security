@@ -51,17 +51,24 @@ def test_ll06_same_org_peer_can_take_ownership(app, client):
 
 
 def test_ll07_invite_role_override(app, client):
-    login(client, "student")
+    register(client, "contractor07", "contractor07@example.local", "GammaLabs")
+    login(client, "alice")
     token = csrf(client)
-    r = client.post("/org/accept", data={"token": "ALPHA-ARCHIVED-INVITE", "role": "owner", "csrf_token": token}, follow_redirects=True)
-    assert expected_flag(app, "LL07", "student").encode() in r.data
+    client.post("/org/invite", data={"email": "contractor07@example.local", "role": "viewer", "csrf_token": token}, follow_redirects=True)
+    with app.app_context():
+        invite_token = get_db().execute("SELECT token FROM invitations WHERE email='contractor07@example.local' ORDER BY id DESC").fetchone()["token"]
+    login(client, "contractor07")
+    token = csrf(client)
+    r = client.post("/org/accept", data={"token": invite_token, "role": "owner", "csrf_token": token}, follow_redirects=True)
+    assert expected_flag(app, "LL07", "contractor07").encode() in r.data
 
 
 def test_ll08_revoked_or_used_invite_still_accepted(app, client):
-    login(client, "student")
+    register(client, "analyst08", "analyst@example.local", "GammaLabs")
+    login(client, "analyst08")
     token = csrf(client)
     r = client.post("/org/accept", data={"token": "BETA-USED-INVITE", "csrf_token": token}, follow_redirects=True)
-    assert expected_flag(app, "LL08", "student").encode() in r.data
+    assert expected_flag(app, "LL08", "analyst08").encode() in r.data
 
 
 def test_ll09_state_machine_skip(app, client):
@@ -119,9 +126,10 @@ def test_ll15_owner_can_approve_own_work(app, client):
 
 
 def test_ll16_org_knowledge_is_enough_for_recovery(app, client):
+    login(client, "student")
     token = csrf(client)
     r = client.post("/recover", data={"username": "carol", "org_name": "BetaOps", "new_password": "NewPassword1!", "csrf_token": token}, follow_redirects=True)
-    assert expected_flag(app, "LL16", "carol").encode() in r.data
+    assert expected_flag(app, "LL16", "student").encode() in r.data
 
 
 def test_ll17_concurrent_redemption_exceeds_recorded_usage(app):
