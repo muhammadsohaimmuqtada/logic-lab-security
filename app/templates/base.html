@@ -12,27 +12,11 @@
   <nav>
     <a href="/lab">Challenges</a>
     {% if session.get('user_id') %}
-      <a href="/services">Services</a>
-      <a href="/org">Organization</a>
-      <a href="/commerce">Commerce</a>
-      <form method="post" action="/logout" class="inline">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="link-button">Logout</button>
-      </form>
-    {% else %}
-      <a href="/login">Login</a>
-      <a href="/register">Register</a>
-    {% endif %}
+      <a href="/services">Services</a><a href="/org">Organization</a><a href="/commerce">Commerce</a><a href="/entitlements">Plan</a>
+      <form method="post" action="/logout" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link-button">Logout</button></form>
+    {% else %}<a href="/login">Login</a><a href="/register">Register</a>{% endif %}
   </nav>
 </header>
-<main class="shell">
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for category, message in messages %}
-      <div class="flash {{ category }}">{{ message }}</div>
-    {% endfor %}
-  {% endwith %}
-  {% block content %}{% endblock %}
-</main>
+<main class="shell">{% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}{% endwith %}{% block content %}{% endblock %}</main>
 <footer>Purpose-built training application. Run only in an isolated lab environment.</footer>
-</body>
-</html>
+</body></html>

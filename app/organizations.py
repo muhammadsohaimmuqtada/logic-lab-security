@@ -13,10 +13,7 @@ org_bp = Blueprint("orgs", __name__, url_prefix="/org")
 def dashboard():
     db = get_db()
     uid = session["user_id"]
-    memberships = db.execute(
-        "SELECT m.*, o.name FROM memberships m JOIN orgs o ON o.id=m.org_id WHERE m.user_id=? ORDER BY o.name",
-        (uid,),
-    ).fetchall()
+    memberships = db.execute("SELECT m.*, o.name FROM memberships m JOIN orgs o ON o.id=m.org_id WHERE m.user_id=? ORDER BY o.name", (uid,)).fetchall()
     active = db.execute("SELECT * FROM orgs WHERE id=?", (current_org_id(),)).fetchone()
     invites = db.execute("SELECT * FROM invitations WHERE org_id=? ORDER BY id DESC LIMIT 20", (current_org_id(),)).fetchall()
     return render_template("org.html", memberships=memberships, active=active, invites=invites)
@@ -37,10 +34,7 @@ def switch(org_id):
 @login_required
 def context_feed():
     org_id = session.get("capability_org_id")
-    rows = get_db().execute(
-        "SELECT detail FROM activities WHERE org_id=? AND event='TENANT_CONTEXT' ORDER BY id DESC",
-        (org_id,),
-    ).fetchall()
+    rows = get_db().execute("SELECT detail FROM activities WHERE org_id=? AND event='TENANT_CONTEXT' ORDER BY id DESC", (org_id,)).fetchall()
     return render_template("context_feed.html", rows=rows, marker=flag("LL04") if rows and org_id != current_org_id() else None)
 
 
@@ -52,10 +46,7 @@ def create_invite():
     if role not in {"viewer", "member", "manager"} or "@" not in email:
         abort(400)
     token = secrets.token_urlsafe(18)
-    get_db().execute(
-        "INSERT INTO invitations(org_id,email,role,token,revoked,used_at) VALUES(?,?,?,?,0,NULL)",
-        (current_org_id(), email, role, token),
-    )
+    get_db().execute("INSERT INTO invitations(org_id,email,role,token,revoked,used_at) VALUES(?,?,?,?,0,NULL)", (current_org_id(), email, role, token))
     flash(f"Invitation created: {token}", "success")
     return redirect(url_for("orgs.dashboard"))
 
@@ -79,10 +70,7 @@ def accept_invite():
             flash("Invitation not found.", "error")
             return redirect(url_for("orgs.accept_invite"))
         role = requested_role if requested_role in {"viewer", "member", "manager", "owner"} else invite["role"]
-        get_db().execute(
-            "INSERT INTO memberships(user_id,org_id,role) VALUES(?,?,?) ON CONFLICT(user_id,org_id) DO UPDATE SET role=excluded.role",
-            (session["user_id"], invite["org_id"], role),
-        )
+        get_db().execute("INSERT INTO memberships(user_id,org_id,role) VALUES(?,?,?) ON CONFLICT(user_id,org_id) DO UPDATE SET role=excluded.role", (session["user_id"], invite["org_id"], role))
         get_db().execute("UPDATE invitations SET used_at=? WHERE id=?", (int(time.time()), invite["id"]))
         session["active_org_id"] = invite["org_id"]
         marker = []
