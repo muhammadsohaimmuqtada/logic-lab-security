@@ -27,7 +27,7 @@ Two identities are intentionally separated:
 - **application user** (`session.user_id`) — the account currently operating inside the simulated SaaS product;
 - **lab actor** (`session.lab_actor_id`) — the learner whose flags, hints, and progress are being scored.
 
-This allows account-recovery and takeover exercises to pivot into another application account without moving the learner's score to the victim account.
+This allows account-recovery and takeover exercises to pivot into another application account without moving the learner's score to the victim account. If recovery occurs before a lab actor exists, the challenge proof is stored as pending browser/session state and bound when the first authenticated learner identity is established.
 
 ## Challenge contract
 
@@ -40,7 +40,7 @@ Every challenge must define:
 5. an exploitability regression test;
 6. safety invariants proving the challenge does not require host compromise.
 
-Unrelated flaws that provide an easier route to the same objective are treated as lab-design bugs and should either be removed or promoted into their own explicit challenge.
+Unrelated flaws that provide an easier route to the same objective are treated as lab-design bugs and should either be removed or promoted into their own explicit challenge. Validation and protocol semantics remain correct unless violating them is itself the explicit lesson; for example, LL22 preserves valid service-domain state while intentionally omitting property-level authorization.
 
 ## Data model
 
@@ -57,6 +57,10 @@ The SQLite schema models:
 
 Schema creation is idempotent. Demo seeding is protected by a SQLite `BEGIN IMMEDIATE` transaction so multiple application workers cannot race on a fresh database.
 
+## HTTP mutation boundary
+
+Business operations that mutate persistent state use POST/PATCH and therefore pass through the global CSRF guard. Quota-consuming exports are modeled as POST operations even though their response payload is an export, because generation consumes a persistent quota unit. Read-only search, service views, activity views, premium-report rendering and progress retrieval remain GET operations.
+
 ## Flag model
 
 Flags are derived with HMAC-SHA256 from:
@@ -71,7 +75,7 @@ The installation flag secret is distinct from the Flask session secret. If expli
 
 Direct Python and default Gunicorn execution bind to loopback. In Docker, Gunicorn binds to the container interface while Compose publishes the service only on host loopback.
 
-The container runs as an unprivileged user and the CI pipeline boots the built image and checks `/health` over the published port.
+The production image contains only runtime dependencies, the application package and Gunicorn configuration. It excludes tests, instructor documentation, challenge manifests and repository-only tooling, and runs as an unprivileged user. CI boots the built image and checks `/health` over the published port.
 
 ## Testing layers
 
