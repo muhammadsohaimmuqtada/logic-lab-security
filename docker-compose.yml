@@ -2,14 +2,20 @@ services:
   logiclab:
     build: .
     environment:
-      FLASK_SECRET_KEY: local-docker-training-secret-change-me
+      LOGICLAB_INSTANCE: /app/instance
       DATABASE_PATH: /app/instance/logiclab.db
-      SECURITY_LOG_PATH: /app/instance/security.log
       LAB_MODE: "1"
+      GUNICORN_BIND: 0.0.0.0:8000
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - logiclab-data:/app/instance
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
 volumes:
   logiclab-data:
