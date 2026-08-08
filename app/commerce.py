@@ -2,7 +2,7 @@ import sqlite3
 import time
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, abort, current_app
 from .db import get_db
-from .security import login_required
+from .security import login_required, parse_int
 from .lab import flag
 
 commerce_bp = Blueprint("commerce", __name__, url_prefix="/commerce")
@@ -21,20 +21,21 @@ def index():
 @login_required
 def checkout():
     db = get_db()
-    service_id = int(request.form.get("service_id") or 0)
+    service_id = parse_int(request.form.get("service_id"), minimum=1)
     service = db.execute("SELECT * FROM services WHERE id=?", (service_id,)).fetchone()
     if not service or service["status"] not in {"approved", "published"}:
         abort(400)
-    try:
-        submitted_price = max(0, int(request.form.get("price_cents") or service["price_cents"]))
-    except ValueError:
-        abort(400)
+    submitted_price = parse_int(request.form.get("price_cents"), default=service["price_cents"], minimum=0, maximum=1_000_000)
     coupon_codes = [x.strip().upper() for x in (request.form.get("coupon_codes") or "").split(",") if x.strip()]
     discount = 0
     valid_codes = []
+    repeated_coupon = False
     for code in coupon_codes:
         coupon = db.execute("SELECT * FROM coupons WHERE code=?", (code,)).fetchone()
         if coupon and coupon["used_count"] < coupon["max_uses"]:
+            prior_checkout_uses = db.execute("SELECT COUNT(*) AS c FROM coupon_checkout_uses WHERE code=?", (code,)).fetchone()["c"]
+            if prior_checkout_uses >= coupon["max_uses"]:
+                repeated_coupon = True
             discount += coupon["discount_cents"]
             valid_codes.append(code)
     paid = max(0, submitted_price - discount)
@@ -43,11 +44,13 @@ def checkout():
         flash("Insufficient credits.", "error")
         return redirect(url_for("commerce.index"))
     db.execute("UPDATE users SET credits=credits-? WHERE id=?", (paid, session["user_id"]))
-    db.execute("INSERT INTO orders(buyer_user_id,service_id,list_price_cents,paid_cents,coupon_codes,status,created_at) VALUES(?,?,?,?,?,'paid',?)", (session["user_id"], service_id, service["price_cents"], paid, ",".join(valid_codes), int(time.time())))
+    order_id = db.execute("INSERT INTO orders(buyer_user_id,service_id,list_price_cents,paid_cents,coupon_codes,status,created_at) VALUES(?,?,?,?,?,'paid',?)", (session["user_id"], service_id, service["price_cents"], paid, ",".join(valid_codes), int(time.time()))).lastrowid
+    for code in valid_codes:
+        db.execute("INSERT INTO coupon_checkout_uses(code,user_id,order_id,created_at) VALUES(?,?,?,?)", (code, session["user_id"], order_id, int(time.time())))
     markers = []
     if submitted_price < service["price_cents"]:
         markers.append(flag("LL11"))
-    if len(valid_codes) > 1 or valid_codes:
+    if len(valid_codes) > 1 or repeated_coupon:
         markers.append(flag("LL12"))
     flash(f"Purchase completed for {paid} credits. {' '.join(markers)}", "success")
     return redirect(url_for("commerce.index"))
