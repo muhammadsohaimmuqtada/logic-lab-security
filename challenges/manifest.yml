@@ -1,0 +1,72 @@
+version: 2
+name: Logic Lab Security
+mode: intentionally-vulnerable-business-logic
+challenges:
+  - id: LL01
+    title: Tenant Enrollment
+    difficulty: intermediate
+    objective: Access organization-only data without being invited.
+  - id: LL02
+    title: Cross-Tenant Export
+    difficulty: intermediate
+    objective: Recover protected service data through an export workflow.
+  - id: LL03
+    title: Tenant Parameter Trust
+    difficulty: intermediate
+    objective: Discover another tenant's service metadata through normal search behavior.
+  - id: LL04
+    title: Stale Tenant Context
+    difficulty: advanced
+    objective: Expose data from a previous authorization context after switching organizations.
+  - id: LL05
+    title: Indirect Object Leak
+    difficulty: intermediate
+    objective: Reach protected information through a secondary representation.
+  - id: LL06
+    title: Ownership Transfer
+    difficulty: intermediate
+    objective: Take ownership of a service you may view but should not manage.
+  - id: LL07
+    title: Invite Role Escalation
+    difficulty: advanced
+    objective: Convert a legitimate invite into a higher-privilege membership.
+  - id: LL08
+    title: Invite Lifecycle
+    difficulty: intermediate
+    objective: Use an invitation after the business believes it is no longer valid.
+  - id: LL09
+    title: State Machine Bypass
+    difficulty: intermediate
+    objective: Reach a protected service state without completing required transitions.
+  - id: LL10
+    title: Approval Integrity
+    difficulty: advanced
+    objective: Change approved content while retaining its approval decision.
+  - id: LL11
+    title: Checkout Integrity
+    difficulty: beginner
+    objective: Purchase a service for less than its authoritative price.
+  - id: LL12
+    title: Promotion Abuse
+    difficulty: intermediate
+    objective: Break intended promotion exclusivity or consumption rules.
+  - id: LL13
+    title: Referral Economics
+    difficulty: intermediate
+    objective: Create referral value without bringing a distinct new customer.
+  - id: LL14
+    title: Refund Replay
+    difficulty: intermediate
+    objective: Receive more refund value than the original payment.
+  - id: LL15
+    title: Separation of Duties
+    difficulty: intermediate
+    objective: Defeat the maker-checker approval model.
+  - id: LL16
+    title: Recovery Proof
+    difficulty: intermediate
+    objective: Reset an account using business information that is not an authentication factor.
+  - id: LL17
+    title: Redemption Race
+    difficulty: advanced
+    objective: Win a concurrent check-then-act race against a one-use promotion.

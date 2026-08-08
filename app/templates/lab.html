@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block content %}
+<div class="page-head"><div><p class="eyebrow">CHALLENGE BOARD</p><h1>Business logic scenarios</h1><p class="lead">Treat the application as a black box. Understand the intended workflow, then prove where the business assumption fails.</p></div><div class="stat"><b>{{ solved|length }}</b><span>/ {{ challenges|length }} solved</span></div></div>
+<div class="challenge-grid">
+{% for c in challenges %}<article class="card challenge"><div class="challenge-top"><code>{{ c.id }}</code><span class="badge">{{ c.difficulty }}</span></div><h3>{{ c.title }}</h3><p>{{ c.objective }}</p><div class="status">{% if c.id in solved %}Solved{% else %}Unsolved{% endif %}</div></article>{% endfor %}
+</div>
+<div class="card submit"><h2>Submit flag</h2><form method="post" action="/lab/submit"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="challenge_id" placeholder="LL01" required><input name="flag" placeholder="FLAG{...}" required><button class="btn">Validate</button></form></div>
+{% endblock %}

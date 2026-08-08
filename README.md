@@ -1,159 +1,158 @@
-# Logic Lab Security
+# Logic Lab Security v2
 
-[![CI](https://github.com/muhammadsohaimmuqtada/logic-lab-security/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammadsohaimmuqtada/logic-lab-security/actions/workflows/ci.yml)
+**Logic Lab Security is intentionally vulnerable.** It is a local training application for learning web business-logic exploitation in a realistic multi-tenant SaaS environment.
 
-A Flask security lab focused on multi-tenant authorization, business-logic enforcement, and secure application design. The project is built around concrete access-control and state-change behaviors rather than generic scanner output.
+The application is not designed around obvious scanner findings. Learners are expected to understand the business model, map roles and state transitions, identify assumptions, and then prove impact.
 
-## What this project demonstrates
+## Training model
 
-- Multi-tenant visibility policy (`private`, `org`, `public`)
-- Owner-only mutation policy (edit/delete/list/unlist)
-- CSRF protection on **all** POST routes (blanket `before_request` hook)
-- Server-side input validation and normalization
-- SQL injection prevention via parameterized queries throughout
-- Rate-limiting and progressive login throttle
-- IP-ban system with admin override
-- Log injection hardening (`_safe_log_value` sanitisation)
-- Configurable reverse-proxy trust for `X-Forwarded-For`
-- Startup warning when admin password is left at insecure default
+Logic Lab models a security-services SaaS platform with:
 
-## Threat Model
+- organizations and tenant membership
+- owner / manager / member / viewer roles
+- collaboration invitations
+- private, organization, and public services
+- review / approval / publication workflows
+- service ownership transfers
+- credit-based purchases and promotions
+- referrals and refunds
+- account recovery
+- audit/activity feeds
+- tenant switching
 
-| Attack Vector | Defense Implemented | Code Location |
+The normal UI expresses the *intended* workflow. Several backend assumptions intentionally diverge from that workflow.
+
+## Challenge families
+
+The v2 lab ships with **17 challenge contracts** spanning:
+
+| ID | Theme | Difficulty |
 |---|---|---|
-| CSRF / state-change forgery | Blanket `csrf_protect_all_posts()` before-request hook | `app/app.py` |
-| Horizontal privilege escalation (IDOR) | `can_modify_service_row()` enforces owner-only writes | `app/app.py` |
-| Broken object-level auth | `can_view_service_row()` checks visibility + org membership | `app/app.py` |
-| Brute-force / credential stuffing | `too_many_failures()` rate-limits by IP; progressive sleep | `app/app.py` |
-| Log injection / forgery | `_safe_log_value()` strips `\n`, `\r`, `|` from all log fields | `app/app.py` |
-| IP spoofing via X-Forwarded-For | `TRUST_PROXY` flag; defaults OFF (falls back to `remote_addr`) | `app/app.py` |
-| Insecure default credentials | Startup `warnings.warn()` if `ADMIN_PASSWORD` not overridden | `app/app.py` |
-| Enum / input tampering | `normalize_visibility()`, `normalize_username()`, `validate_password_basic()` | `app/app.py` |
-| Privilege escalation to admin | `admin_required` decorator checks `is_admin` from DB | `app/app.py` |
+| LL01 | Tenant enrollment | Intermediate |
+| LL02 | Cross-tenant export | Intermediate |
+| LL03 | Tenant parameter trust | Intermediate |
+| LL04 | Stale authorization context | Advanced |
+| LL05 | Indirect object leakage | Intermediate |
+| LL06 | Ownership transfer | Intermediate |
+| LL07 | Invite role escalation | Advanced |
+| LL08 | Invite lifecycle abuse | Intermediate |
+| LL09 | State-machine bypass | Intermediate |
+| LL10 | Approval integrity | Advanced |
+| LL11 | Checkout integrity | Beginner |
+| LL12 | Promotion abuse | Intermediate |
+| LL13 | Referral economics | Intermediate |
+| LL14 | Refund replay | Intermediate |
+| LL15 | Separation of duties | Intermediate |
+| LL16 | Account recovery proof | Intermediate |
+| LL17 | Concurrency / redemption race | Advanced |
 
-## Security Architecture
+The learner-facing challenge board gives objectives, not exploit steps.
 
-```text
-Browser / Client
-       │
-       ▼
-  [nginx / reverse proxy]  ← sets X-Forwarded-For only when TRUST_PROXY=1
-       │
-       ▼
-  [Gunicorn workers]
-       │
-       ├─ before_request: ban_gate()          ← IP ban check (every request)
-       ├─ before_request: csrf_protect_all_posts()  ← CSRF on all POSTs
-       │
-       ▼
-  [Route handler]
-       ├─ @login_required                     ← session check
-       ├─ @admin_required                     ← is_admin DB check
-       ├─ Input validation / normalization
-       ├─ can_view_service_row()              ← visibility + org policy
-       └─ can_modify_service_row()            ← owner-only mutations
-```
+## Safety boundary
 
-## OWASP Coverage
+The application logic is deliberately flawed, but the lab avoids host-compromise primitives. The project intentionally keeps:
 
-| OWASP A-Category | Coverage |
-|---|---|
-| A01 Broken Access Control | IDOR protection, visibility policy, admin guard |
-| A03 Injection | Parameterized SQL throughout; log injection sanitisation |
-| A04 Insecure Design | Threat-modelled multi-tenant visibility & mutation model |
-| A05 Security Misconfiguration | Startup warning for default credentials; `TRUST_PROXY` flag |
-| A07 Identification & Auth Failures | Rate limiting, session rotation on login, CSRF |
+- parameterized SQL
+- CSRF protection on state-changing requests
+- Jinja auto-escaping
+- bounded request size
+- loopback-only development/Gunicorn binding
+- no shell-command execution feature
+- no arbitrary file-read/write challenge
 
-## Project Structure
+Run it only on a local machine, disposable VM, or isolated classroom network. Do **not** expose it directly to the public internet.
 
-```text
-logic-lab-security/
-├── app/
-│   ├── app.py            # Main Flask application (all logic)
-│   ├── static/           # CSS / JS assets
-│   └── templates/        # Jinja2 HTML templates
-├── tests/
-│   ├── conftest.py       # Pytest fixtures (per-test isolated DB)
-│   └── test_policy_smoke.py  # 14 security smoke tests
-├── .github/
-│   └── workflows/
-│       └── ci.yml        # GitHub Actions CI (Python 3.11, pytest)
-├── .env.example          # Environment variable template
-├── gunicorn.conf.py      # Gunicorn configuration
-├── requirements.txt      # Python dependencies
-└── README.md
-```
-
-## Quick Start
+## Quick start
 
 ```bash
-# 1. Clone and enter the directory
 git clone https://github.com/muhammadsohaimmuqtada/logic-lab-security.git
 cd logic-lab-security
-
-# 2. Create a virtual environment and install dependencies
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-
-# 3. Configure environment variables
 cp .env.example .env
-# Edit .env – set FLASK_SECRET_KEY, ADMIN_PASSWORD, and DATABASE_PATH
-
-# 4. Run the development server
-export $(cat .env | xargs)
+export $(grep -v '^#' .env | xargs)
 python app/app.py
-# or via gunicorn:
-# gunicorn -c gunicorn.conf.py app.app:app
 ```
 
-## Testing
+Open `http://127.0.0.1:8000`.
+
+### Seeded accounts
+
+All seeded users use the demo password `Password1!`:
+
+| User | Organization / role |
+|---|---|
+| `alice` | AlphaSec owner |
+| `bob` | AlphaSec member |
+| `carol` | BetaOps owner |
+| `dave` | BetaOps manager |
+| `auditor` | AlphaSec viewer + BetaOps viewer |
+| `student` | GammaLabs owner |
+
+Reset the lab whenever you want a clean state:
 
 ```bash
-pip install pytest
-pytest tests/ -v
+python scripts/reset_demo_db.py
 ```
 
-All tests use an isolated per-test SQLite database with no shared state or external services required.
+## Docker
 
-### What the test suite covers
+```bash
+docker compose up --build
+```
 
-| Test | Category |
-|---|---|
-| `test_idor_user_b_cannot_edit_user_a_service` | IDOR / Horizontal access |
-| `test_idor_user_b_cannot_delete_user_a_service` | IDOR / Horizontal access |
-| `test_private_service_not_visible_to_other_user` | Visibility enforcement |
-| `test_org_service_visible_within_same_org` | Visibility enforcement |
-| `test_org_service_not_visible_to_different_org` | Visibility enforcement |
-| `test_public_service_visible_to_all` | Visibility enforcement |
-| `test_post_without_csrf_returns_403` | CSRF rejection |
-| `test_same_org_peer_cannot_modify_org_service` | Owner-only mutation policy |
-| `test_rate_limit_after_max_failed_logins` | Rate limiting |
-| `test_invalid_visibility_rejected` | Input validation |
-| `test_username_with_special_chars_rejected` | Input validation |
-| `test_too_short_password_rejected` | Input validation |
-| `test_non_admin_cannot_access_admin_routes` | Admin access control |
-| `test_unauthenticated_user_redirected_from_admin` | Admin access control |
+The compose configuration publishes the lab only on `127.0.0.1:8000`.
 
-## Core security design
+## Testing philosophy
 
-### Visibility model
-- `public` → visible to everyone (logged-in users)
-- `org` → visible to users in the same organization only
-- `private` → visible only to the owner
+The test suite has three layers:
 
-### Mutation model
-- Edit / Delete / List / Unlist actions are **owner-only**
-- Same-org users can *view* `org` items but **cannot** modify them
+1. **normal-flow tests** — the application must still behave like a coherent SaaS product;
+2. **challenge-contract tests** — each intentional flaw must remain reproducible, so a future security refactor cannot silently remove a teaching scenario;
+3. **safety-invariant tests** — the project must not drift into host-level execution primitives.
 
-## Tech stack
+```bash
+pytest -q
+```
 
-- Flask 3.x
-- Gunicorn
-- nginx
-- SQLite (WAL mode)
-- Jinja2
+A passing challenge-contract test means the lab scenario is still intentionally exploitable; it is not a claim that the behavior is secure.
 
-## Notes
+## Repository structure
 
-This is a lab focused on secure application design and authorization logic. Do not expose it to the internet with default credentials or development configuration.
+```text
+app/
+├── __init__.py          application factory
+├── app.py               compatibility/run entrypoint
+├── auth.py              onboarding, login, recovery
+├── commerce.py          checkout, coupons, referrals, refunds, race lab
+├── config.py            safe runtime boundary
+├── db.py                schema and deterministic demo seed
+├── lab.py               challenge catalog and flag validation
+├── organizations.py     tenant membership, invites, tenant switching
+├── security.py          CSRF, session helpers, roles, audit events
+├── services.py          service authorization and workflow logic
+├── static/
+└── templates/
+challenges/manifest.yml  learner challenge metadata
+docs/INSTRUCTOR_GUIDE.md spoiler-heavy instructor mapping
+tests/                   normal, challenge-contract, and safety tests
+```
+
+## Educational intent
+
+Logic Lab is built to teach the difference between:
+
+- authentication and authorization
+- object authorization and tenant membership authorization
+- UI workflow and server-side state enforcement
+- data validation and business-rule validation
+- successful transactions and economically valid transactions
+- per-request authorization and authorization-context lifecycle
+- sequential correctness and concurrent correctness
+
+If you are using the lab as a learner, avoid reading `docs/INSTRUCTOR_GUIDE.md` until you have completed your attempt.
+
+## License
+
+MIT. Intended for authorized education, local testing, classroom exercises, and defensive security research.

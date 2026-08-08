@@ -1,0 +1,1 @@
+{% extends "base.html" %}{% block content %}<div class="auth card"><p class="eyebrow">COLLABORATION</p><h1>Accept invitation</h1><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Invitation token<input name="token" required></label><button class="btn">Join organization</button></form></div>{% endblock %}

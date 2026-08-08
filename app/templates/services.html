@@ -1,48 +1,5 @@
-{% extends "base.html" %}
-{% block content %}
-
-<div class="container">
-  <div class="card">
-    <h2>Your Services</h2>
-    <p class="muted">Multi-tenant services with visibility and state rules.</p>
-
-    <form method="POST" action="/services/new" class="row" style="margin-top:12px;">
-  <input type="hidden" name="_csrf_token" value="{{ session.get('_csrf_token') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input class="input" name="name" placeholder="Service name" required>
-      <input class="input" name="description" placeholder="Description">
-      <input class="input" name="price_cents" type="number" min="0" max="500000" step="1" placeholder="Price (cents)">
-      <select class="input" name="visibility">
-        <option value="private">Private</option>
-        <option value="org">Org</option>
-        <option value="public">Public</option>
-      </select>
-      <button class="btn" type="submit">Create</button>
-    </form>
-  </div>
-
-  <div class="card">
-    <h3>Visible Services</h3>
-    {% if services|length == 0 %}
-      <p class="muted">No services visible yet.</p>
-    {% else %}
-      <ul class="list">
-      {% for s in services %}
-        <li class="list-item">
-          <div>
-            <div class="title">{{ s.name }}</div>
-            <div class="muted">{{ s.description }}</div>
-            <div class="muted">
-              Status: <b>{{ s.status }}</b> · Visibility: <b>{{ s.visibility }}</b> · Price: <b>{{ s.price_cents }}</b>
-            </div>
-            <div class="muted">Owner ID: {{ s.owner_user_id }} · Org ID: {{ s.org_id }} · Created: {{ s.created_at }}</div>
-          </div>
-          <a class="btn secondary" href="/services/{{ s.id }}">View</a>
-        </li>
-      {% endfor %}
-      </ul>
-    {% endif %}
-  </div>
-</div>
-
+{% extends "base.html" %}{% block content %}
+<div class="page-head"><div><p class="eyebrow">SERVICE CATALOG</p><h1>Visible services</h1></div><div class="actions"><a class="btn ghost" href="/services/search">Search</a><a class="btn ghost" href="/services/export">Export</a></div></div>
+<div class="card"><h2>Create service</h2><form method="post" action="/services/new" class="form-grid"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="name" placeholder="Service name" required><input name="description" placeholder="Description"><input type="number" name="price_cents" value="5000"><select name="visibility"><option>private</option><option>org</option><option>public</option></select><button class="btn">Create</button></form></div>
+<div class="grid two">{% for s in services %}<article class="card service"><div class="row"><span class="badge">{{ s.status }}</span><span class="muted">#{{ s.id }}</span></div><h3>{{ s.name }}</h3><p>{{ s.description }}</p><div class="meta">org {{ s.org_id }} · owner {{ s.owner_user_id }} · {{ s.visibility }} · {{ s.price_cents }} credits</div><a class="btn ghost" href="/services/{{ s.id }}">Open</a></article>{% else %}<div class="card">No services visible.</div>{% endfor %}</div>
 {% endblock %}

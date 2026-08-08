@@ -1,16 +1,22 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card">
-  <h1>Logic Lab Security Project</h1>
-  <p>A realistic web app for learning secure web application patterns: access control, authorization, input validation, and business logic hardening.</p>
-  <div style="margin-top:14px;">
-    {% if user %}
-      <a class="btn" href="/dashboard">Go to Dashboard</a>
-    {% else %}
-      <a class="btn" href="/register">Create Account</a>
-      <a class="btn secondary" href="/login" style="margin-left:8px;">Sign In</a>
-    {% endif %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">BUSINESS LOGIC SECURITY LAB</p>
+    <h1>Learn the rules.<br>Then break the assumptions.</h1>
+    <p class="lead">A realistic multi-tenant SaaS lab for authorization, workflow, economic-abuse and concurrency testing. The interface tells you what the business expects—not where the bugs are.</p>
+    <div class="actions"><a class="btn" href="/lab">Open challenge board</a><a class="btn ghost" href="/login">Use demo account</a></div>
   </div>
-  <div class="footer">Running behind Nginx → Gunicorn → Flask</div>
-</div>
+  <div class="terminal-card"><span>training surface</span><pre>tenant boundaries
+role inheritance
+approval workflows
+state transitions
+commerce integrity
+race conditions</pre></div>
+</section>
+<section class="grid three">
+  <article class="card"><h3>17 scenarios</h3><p>Beginner through advanced business-logic challenges.</p></article>
+  <article class="card"><h3>Real workflows</h3><p>Organizations, invitations, services, approvals, purchases and refunds.</p></article>
+  <article class="card"><h3>Safe boundary</h3><p>The app logic is intentionally flawed; the host-facing surface remains constrained.</p></article>
+</section>
 {% endblock %}

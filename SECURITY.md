@@ -1,11 +1,7 @@
 # Security Policy
 
-## Scope
-This repository is a local lab / portfolio project for secure web application design and business logic hardening.
+Logic Lab Security is an intentionally vulnerable training application. Business-logic weaknesses documented in the instructor guide are expected behavior and should not be reported as security defects.
 
-## Reporting
-If you identify a security issue, please report it privately to the maintainer. Please do not publish exploit details publicly.
+Please report issues that break the **lab safety boundary**, including unintended host command execution, arbitrary host file access, path traversal outside the application data directory, dependency compromise, container escape, or a vulnerability that materially expands impact beyond the intended local training application.
 
-## Notes
-- This project is not production-ready by default.
-- Do not deploy with default credentials or test data.
+Do not deploy Logic Lab Security directly to the public internet. Use localhost, a disposable VM, or an isolated classroom environment.
