@@ -6,6 +6,9 @@ from .security import current_org_id, login_required, membership, parse_int
 
 api_bp = Blueprint("api", __name__, url_prefix="/api/v1")
 
+VALID_VISIBILITY = {"private", "org", "public"}
+VALID_STATUS = {"draft", "review", "approved", "published", "archived"}
+
 
 def _service(service_id):
     return get_db().execute("SELECT * FROM services WHERE id=?", (service_id,)).fetchone()
@@ -18,6 +21,53 @@ def _json_object():
     if not isinstance(payload, dict):
         abort(400)
     return payload
+
+
+def _validated_patch(db, service, payload):
+    values = {}
+
+    if "name" in payload:
+        if not isinstance(payload["name"], str) or not 2 <= len(payload["name"].strip()) <= 120:
+            abort(400)
+        values["name"] = payload["name"].strip()
+
+    if "description" in payload:
+        if not isinstance(payload["description"], str) or len(payload["description"]) > 5000:
+            abort(400)
+        values["description"] = payload["description"].strip()
+
+    if "visibility" in payload:
+        visibility = str(payload["visibility"]).strip().lower()
+        if visibility not in VALID_VISIBILITY:
+            abort(400)
+        values["visibility"] = visibility
+
+    if "status" in payload:
+        status = str(payload["status"]).strip().lower()
+        if status not in VALID_STATUS:
+            abort(400)
+        values["status"] = status
+
+    target_org_id = service["org_id"]
+    if "org_id" in payload:
+        target_org_id = parse_int(payload["org_id"], minimum=1)
+        if not db.execute("SELECT 1 FROM orgs WHERE id=?", (target_org_id,)).fetchone():
+            abort(400)
+        values["org_id"] = target_org_id
+
+    target_owner_id = service["owner_user_id"]
+    if "owner_user_id" in payload:
+        target_owner_id = parse_int(payload["owner_user_id"], minimum=1)
+        values["owner_user_id"] = target_owner_id
+
+    if "org_id" in payload or "owner_user_id" in payload:
+        if not db.execute(
+            "SELECT 1 FROM memberships WHERE user_id=? AND org_id=?",
+            (target_owner_id, target_org_id),
+        ).fetchone():
+            abort(400)
+
+    return values
 
 
 @api_bp.route("/services/<int:service_id>/notes")
@@ -40,20 +90,12 @@ def update_service(service_id):
     if not service:
         abort(404)
     payload = _json_object()
-    writable = ("name", "description", "visibility", "status", "owner_user_id", "org_id")
-    fields = []
-    params = []
-    touched_sensitive = False
-    for key in writable:
-        if key in payload:
-            value = payload[key]
-            if key in {"owner_user_id", "org_id"}:
-                value = parse_int(value, minimum=1)
-            fields.append(f"{key}=?")
-            params.append(value)
-            touched_sensitive = touched_sensitive or key in {"visibility", "status", "owner_user_id", "org_id"}
-    if not fields:
+    values = _validated_patch(db, service, payload)
+    if not values:
         return {"updated": False}
+    touched_sensitive = bool(set(values) & {"visibility", "status", "owner_user_id", "org_id"})
+    fields = [f"{key}=?" for key in values]
+    params = [values[key] for key in values]
     params.append(service_id)
     db.execute(f"UPDATE services SET {', '.join(fields)} WHERE id=?", tuple(params))
     unauthorized = service["owner_user_id"] != session["user_id"]
@@ -70,7 +112,7 @@ def batch_visibility():
         abort(400)
     ids = [parse_int(x, minimum=1) for x in raw_ids[:20]]
     visibility = payload.get("visibility", "org")
-    if not ids or visibility not in {"private", "org", "public"}:
+    if not ids or visibility not in VALID_VISIBILITY:
         abort(400)
     first = _service(ids[0])
     if not first or first["owner_user_id"] != session["user_id"]:
@@ -97,7 +139,7 @@ def partner_enroll():
     return {"accepted": True, "marker": flag("LL24") if not is_real_partner else None}
 
 
-@api_bp.route("/export")
+@api_bp.route("/export", methods=["POST"])
 @login_required
 def alternate_export():
     db = get_db()
