@@ -53,7 +53,13 @@ def update_service(service_id):
 def batch_visibility():
     db = get_db()
     payload = request.get_json(silent=True) or {}
-    ids = [int(x) for x in payload.get("ids", [])][:20]
+    raw_ids = payload.get("ids", [])
+    if not isinstance(raw_ids, list):
+        abort(400)
+    try:
+        ids = [int(x) for x in raw_ids][:20]
+    except (TypeError, ValueError):
+        abort(400)
     visibility = payload.get("visibility", "org")
     if not ids or visibility not in {"private", "org", "public"}:
         abort(400)
