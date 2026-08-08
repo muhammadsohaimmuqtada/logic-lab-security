@@ -6,7 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
+
+COPY app ./app
+COPY gunicorn.conf.py .
 
 RUN mkdir -p /app/instance \
     && useradd --create-home --uid 10001 logiclab \
