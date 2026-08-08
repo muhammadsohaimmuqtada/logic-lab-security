@@ -10,7 +10,6 @@ from app.lab import flag
 def app(tmp_path):
     class TestConfig(TestingConfig):
         DATABASE_PATH = Path(tmp_path) / "logiclab-test.db"
-        SECURITY_LOG_PATH = Path(tmp_path) / "security.log"
     return create_app(TestConfig)
 
 
