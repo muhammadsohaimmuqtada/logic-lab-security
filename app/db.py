@@ -55,9 +55,15 @@ def close_db(_exc=None):
 def init_db():
     conn = get_db()
     conn.executescript(SCHEMA)
-    seed_demo(conn)
-    ensure_demo_extensions(conn)
-    migrate_demo_data(conn)
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        seed_demo(conn)
+        ensure_demo_extensions(conn)
+        migrate_demo_data(conn)
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
 
 
 def _insert_user(conn, username, email, org_id, role, referral_code, *, admin=False, credits=10000):
@@ -117,7 +123,14 @@ def reset_database(path):
         path.unlink()
     conn = _connect(path)
     conn.executescript(SCHEMA)
-    seed_demo(conn)
-    ensure_demo_extensions(conn)
-    migrate_demo_data(conn)
-    conn.close()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        seed_demo(conn)
+        ensure_demo_extensions(conn)
+        migrate_demo_data(conn)
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
