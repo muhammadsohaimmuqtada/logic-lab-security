@@ -21,5 +21,55 @@ jobs:
       - name: Run lab contract tests
         env:
           FLASK_SECRET_KEY: ci-logic-lab-secret
+          LAB_FLAG_SECRET: ci-logic-lab-flag-secret
           LAB_MODE: "1"
         run: pytest -q
+      - name: Build learner bundle
+        run: |
+          python scripts/build_learner_bundle.py
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+          bundle = Path("dist/logic-lab-learner.zip")
+          assert bundle.exists()
+          with zipfile.ZipFile(bundle) as zf:
+              names = set(zf.namelist())
+          forbidden = {
+              "docs/INSTRUCTOR_GUIDE.md",
+              "challenges/manifest.yml",
+              "tests/test_challenge_contracts.py",
+              "tests/test_expansion_contracts.py",
+          }
+          assert not (names & forbidden)
+          assert "app/app.py" in names
+          PY
+      - name: Gunicorn smoke test
+        env:
+          FLASK_SECRET_KEY: ci-gunicorn-secret
+          LAB_FLAG_SECRET: ci-gunicorn-flag-secret
+          LAB_MODE: "1"
+        run: |
+          gunicorn -c gunicorn.conf.py app.app:app &
+          pid=$!
+          trap 'kill $pid || true' EXIT
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8000/health >/tmp/logiclab-health.json; then break; fi
+            sleep 0.5
+          done
+          python - <<'PY'
+          import json
+          assert json.load(open('/tmp/logiclab-health.json')) == {"status": "ok", "lab_mode": True}
+          PY
+      - name: Docker build and runtime smoke test
+        run: |
+          docker build -t logic-lab-ci .
+          docker run -d --name logic-lab-ci -p 127.0.0.1:18000:8000 -e GUNICORN_BIND=0.0.0.0:8000 logic-lab-ci
+          trap 'docker rm -f logic-lab-ci >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18000/health >/tmp/logiclab-docker-health.json; then break; fi
+            sleep 1
+          done
+          python - <<'PY'
+          import json
+          assert json.load(open('/tmp/logiclab-docker-health.json')) == {"status": "ok", "lab_mode": True}
+          PY
