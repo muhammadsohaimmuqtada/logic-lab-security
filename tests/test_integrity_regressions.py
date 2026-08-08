@@ -61,6 +61,25 @@ def test_invitation_is_bound_to_recipient_identity(client):
     assert response.status_code == 403
 
 
+def test_invite_acceptance_persists_tenant_and_refreshes_capability_context(app, client):
+    login(client, "student")
+    token = csrf(client)
+    response = client.post(
+        "/org/accept",
+        data={"token": "BETA-USED-INVITE", "csrf_token": token},
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    with client.session_transaction() as sess:
+        assert sess["active_org_id"] == 2
+        assert sess["capability_org_id"] == 2
+    with app.app_context():
+        active_org_id = get_db().execute("SELECT active_org_id FROM users WHERE username='student'").fetchone()["active_org_id"]
+        assert active_org_id == 2
+    context = client.get("/org/context-feed")
+    assert expected_flag(app, "LL04", "student").encode() not in context.data
+
+
 def test_standard_invites_respect_subscription_capacity(app, client):
     login(client, "student")
     token = csrf(client)
@@ -94,6 +113,36 @@ def test_entitlement_mutations_require_manager_role(client):
     assert client.post("/entitlements/bulk-invite", data={"emails": "x@test.local", "csrf_token": token}).status_code == 403
     token = csrf(client)
     assert client.post("/entitlements/trial/extend", data={"days": "7", "csrf_token": token}).status_code == 403
+
+
+def test_referral_reward_is_single_use_per_referred_account(app, client):
+    login(client, "student")
+    token = csrf(client)
+    first = client.post(
+        "/commerce/referral",
+        data={"referral_code": "BOB10", "csrf_token": token},
+        follow_redirects=True,
+    )
+    assert first.status_code == 200
+    assert b"Referral reward applied" in first.data
+    with app.app_context():
+        db = get_db()
+        student_after_first = db.execute("SELECT credits FROM users WHERE username='student'").fetchone()["credits"]
+        bob_after_first = db.execute("SELECT credits FROM users WHERE username='bob'").fetchone()["credits"]
+
+    token = csrf(client)
+    second = client.post(
+        "/commerce/referral",
+        data={"referral_code": "ALICE10", "csrf_token": token},
+        follow_redirects=True,
+    )
+    assert second.status_code == 200
+    assert b"already been applied" in second.data
+    with app.app_context():
+        db = get_db()
+        assert db.execute("SELECT credits FROM users WHERE username='student'").fetchone()["credits"] == student_after_first
+        assert db.execute("SELECT credits FROM users WHERE username='bob'").fetchone()["credits"] == bob_after_first
+        assert db.execute("SELECT COUNT(*) AS c FROM referral_events WHERE referred_user_id=6").fetchone()["c"] == 1
 
 
 def test_legacy_export_obeys_quota_while_preserving_ll02(app, client):
@@ -132,6 +181,18 @@ def test_api_sensitive_patch_rejects_invalid_domain_state(client):
     assert client.patch("/api/v1/services/2", json={"visibility": "everywhere"}, headers=api_headers(client)).status_code == 400
     assert client.patch("/api/v1/services/2", json={"owner_user_id": 9999}, headers=api_headers(client)).status_code == 400
     assert client.patch("/api/v1/services/2", json={"org_id": 9999}, headers=api_headers(client)).status_code == 400
+    assert client.patch("/api/v1/services/2", json={"org_id": True}, headers=api_headers(client)).status_code == 400
+    assert client.patch("/api/v1/services/2", json={"owner_user_id": 2.5}, headers=api_headers(client)).status_code == 400
+
+
+def test_api_rejects_non_object_and_ambiguous_batch_payloads(client):
+    login(client, "student")
+    headers = api_headers(client)
+    assert client.patch("/api/v1/services/5", data="not-json", content_type="application/json", headers=headers).status_code == 400
+    assert client.post("/api/v1/services/batch-visibility", json={"ids": [5], "visibility": ["public"]}, headers=api_headers(client)).status_code == 400
+    assert client.post("/api/v1/services/batch-visibility", json={"ids": [5, 5], "visibility": "public"}, headers=api_headers(client)).status_code == 400
+    assert client.post("/api/v1/services/batch-visibility", json={"ids": [5, 9999], "visibility": "public"}, headers=api_headers(client)).status_code == 400
+    assert client.post("/api/v1/partners/enroll", json={"email": ["student@evilalpha.local"]}, headers=api_headers(client)).status_code == 400
 
 
 def test_malformed_numeric_inputs_return_400(client):
@@ -140,6 +201,33 @@ def test_malformed_numeric_inputs_return_400(client):
     token = csrf(client)
     assert client.post("/commerce/checkout", data={"service_id": "bad", "csrf_token": token}).status_code == 400
     assert client.post("/api/v1/services/batch-visibility", json={"ids": ["bad"], "visibility": "public"}, headers=api_headers(client)).status_code == 400
+
+
+def test_service_text_validation_is_consistent_and_description_can_be_cleared(app, client):
+    login(client, "student")
+    token = csrf(client)
+    too_long = client.post(
+        "/services/new",
+        data={"name": "x" * 121, "description": "ok", "visibility": "private", "price_cents": "1", "csrf_token": token},
+    )
+    assert too_long.status_code == 400
+
+    token = csrf(client)
+    oversized_edit = client.post(
+        "/services/5/edit",
+        data={"name": "Starter Compliance Checklist", "description": "x" * 5001, "csrf_token": token},
+    )
+    assert oversized_edit.status_code == 400
+
+    token = csrf(client)
+    cleared = client.post(
+        "/services/5/edit",
+        data={"name": "Starter Compliance Checklist", "description": "", "csrf_token": token},
+        follow_redirects=True,
+    )
+    assert cleared.status_code == 200
+    with app.app_context():
+        assert get_db().execute("SELECT description FROM services WHERE id=5").fetchone()["description"] == ""
 
 
 def test_non_owner_ui_does_not_disclose_transfer_action(client):
