@@ -1,4 +1,6 @@
+import os
+
 workers = 2
-bind = "127.0.0.1:8000"
+bind = os.environ.get("GUNICORN_BIND", "127.0.0.1:8000")
 accesslog = "-"
 errorlog = "-"
