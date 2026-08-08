@@ -8,6 +8,15 @@ from .lab import flag
 commerce_bp = Blueprint("commerce", __name__, url_prefix="/commerce")
 
 
+def _parse_int(value, *, default=None):
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        abort(400)
+
+
 @commerce_bp.route("")
 @login_required
 def index():
@@ -21,7 +30,7 @@ def index():
 @login_required
 def checkout():
     db = get_db()
-    service_id = int(request.form.get("service_id") or 0)
+    service_id = _parse_int(request.form.get("service_id"), default=0)
     service = db.execute("SELECT * FROM services WHERE id=?", (service_id,)).fetchone()
     if not service or service["status"] not in {"approved", "published"}:
         abort(400)
@@ -32,11 +41,20 @@ def checkout():
     coupon_codes = [x.strip().upper() for x in (request.form.get("coupon_codes") or "").split(",") if x.strip()]
     discount = 0
     valid_codes = []
+    promotion_abuse = False
     for code in coupon_codes:
         coupon = db.execute("SELECT * FROM coupons WHERE code=?", (code,)).fetchone()
         if coupon and coupon["used_count"] < coupon["max_uses"]:
+            prior_checkout_uses = db.execute(
+                "SELECT COUNT(*) AS c FROM orders WHERE (',' || coupon_codes || ',') LIKE ?",
+                (f"%,{code},%",),
+            ).fetchone()["c"]
+            if prior_checkout_uses >= coupon["max_uses"]:
+                promotion_abuse = True
             discount += coupon["discount_cents"]
             valid_codes.append(code)
+    if len(valid_codes) > 1:
+        promotion_abuse = True
     paid = max(0, submitted_price - discount)
     user = db.execute("SELECT * FROM users WHERE id=?", (session["user_id"],)).fetchone()
     if user["credits"] < paid:
@@ -47,7 +65,7 @@ def checkout():
     markers = []
     if submitted_price < service["price_cents"]:
         markers.append(flag("LL11"))
-    if len(valid_codes) > 1 or valid_codes:
+    if promotion_abuse:
         markers.append(flag("LL12"))
     flash(f"Purchase completed for {paid} credits. {' '.join(markers)}", "success")
     return redirect(url_for("commerce.index"))
