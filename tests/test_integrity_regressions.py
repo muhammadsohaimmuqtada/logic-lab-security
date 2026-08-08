@@ -172,5 +172,4 @@ def test_learner_bundle_excludes_instructor_spoilers(tmp_path, monkeypatch):
     assert "README.md" in names
     assert "docs/INSTRUCTOR_GUIDE.md" not in names
     assert "challenges/manifest.yml" not in names
-    assert "tests/test_challenge_contracts.py" not in names
-    assert "tests/test_expansion_contracts.py" not in names
+    assert not any(name.startswith("tests/") for name in names)
