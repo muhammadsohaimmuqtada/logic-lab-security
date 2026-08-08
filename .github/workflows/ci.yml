@@ -39,13 +39,9 @@ jobs:
           assert bundle.exists()
           with zipfile.ZipFile(bundle) as zf:
               names = set(zf.namelist())
-          for forbidden in (
-              'docs/INSTRUCTOR_GUIDE.md',
-              'challenges/manifest.yml',
-              'tests/test_challenge_contracts.py',
-              'tests/test_expansion_contracts.py',
-          ):
-              assert forbidden not in names, forbidden
+          assert 'docs/INSTRUCTOR_GUIDE.md' not in names
+          assert 'challenges/manifest.yml' not in names
+          assert not any(name.startswith('tests/') for name in names)
           print(f'learner bundle: {len(names)} files')
           PY
       - name: Build container
